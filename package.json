@@ -1,0 +1,39 @@
+{
+  "name": "datadam_mcp",
+  "version": "1.0.0",
+  "description": "Personal Database MCP",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "inspector": "mcp-inspector",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KennethLeeJE8/datadam_mcp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/KennethLeeJE8/datadam_mcp/issues"
+  },
+  "homepage": "https://github.com/KennethLeeJE8/datadam_mcp#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.16.7",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
