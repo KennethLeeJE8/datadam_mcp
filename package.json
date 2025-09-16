@@ -24,7 +24,9 @@
   "homepage": "https://github.com/KennethLeeJE8/datadam_mcp#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
+    "@supabase/supabase-js": "^2.57.4",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "zod": "^3.25.76"
   },

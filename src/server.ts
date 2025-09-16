@@ -1,120 +1,462 @@
 import express from "express";
 import cors from "cors";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import * as dotenv from "dotenv";
 
-interface User {
+// Load environment variables
+dotenv.config();
+
+interface PersonalDataRecord {
   id: string;
-  name: string;
-  email: string;
-  department: string;
-  role: string;
-  location: string;
-  phone: string;
-  startDate: string;
-  skills: string[];
-  manager: string | null;
+  user_id: string;
+  title: string;
+  content: any;
+  tags: string[];
+  category: string;
+  classification: string;
+  created_at: string;
+  updated_at: string;
 }
 
-let userData: User[] = [];
+interface Category {
+  category_name: string;
+  display_name: string;
+  description: string;
+  item_count: number;
+  trigger_words: string[];
+  query_hint: string;
+  example_queries: string[];
+  last_modified: string;
+}
 
-async function loadUserData(): Promise<void> {
+let supabase: SupabaseClient;
+
+async function initializeDatabase(): Promise<void> {
   try {
-    const dataPath = join(__dirname, "..", "data", "users.json");
-    const rawData = await readFile(dataPath, "utf-8");
-    userData = JSON.parse(rawData);
-    console.log(`Loaded ${userData.length} users`);
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Missing Supabase configuration. Please check your .env file.");
+    }
+
+    supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Test the connection by fetching category stats
+    const { data, error } = await supabase.rpc('get_category_stats');
+    
+    if (error) {
+      throw error;
+    }
+    
+    console.log(`✅ Connected to Supabase successfully`);
+    console.log(`📊 Database stats:`, data?.[0] || 'No data');
   } catch (error) {
-    console.error("Error loading user data:", error);
-    userData = [];
+    console.error("❌ Error connecting to database:", error);
+    throw error;
   }
 }
 
 function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: "user-data-server",
+    name: "personal-data-mcp-server",
     version: "1.0.0"
   });
 
-  // Register the user IDs list resource
+  // Register the categories list resource
   server.registerResource(
-    "user-ids",
-    "users://user_ids",
+    "data-categories",
+    "data://categories",
     {
-      title: "User IDs List",
-      description: "List of all available user IDs"
+      title: "Data Categories",
+      description: "List of available personal data categories with item counts"
     },
     async (uri) => {
-      const userIdsList = userData.map(user => 
-        `${user.id}: ${user.name} (${user.role})`
-      ).join('\n');
-      
-      return {
-        contents: [{
-          uri: uri.href,
-          text: userIdsList,
-          mimeType: "text/plain"
-        }]
-      };
-    }
-  );
+      try {
+        const { data: categories, error } = await supabase.rpc('get_active_categories');
+        
+        if (error) {
+          return {
+            contents: [{
+              uri: uri.href,
+              text: `Error fetching categories: ${error.message}`,
+              mimeType: "text/plain"
+            }]
+          };
+        }
 
-  // Register the search users tool
-  server.registerTool(
-    "search-users",
-    {
-      title: "Search Users",
-      description: "Search for users by name, department, role, or skills",
-      inputSchema: {
-        query: z.string().describe("Search query (name, department, role, or skill)")
-      }
-    },
-    async ({ query }) => {
-      const searchTerm = query.toLowerCase();
-      
-      const matchingUsers = userData.filter(user => 
-        user.name.toLowerCase().includes(searchTerm) ||
-        user.department.toLowerCase().includes(searchTerm) ||
-        user.role.toLowerCase().includes(searchTerm) ||
-        user.email.toLowerCase().includes(searchTerm) ||
-        user.location.toLowerCase().includes(searchTerm) ||
-        user.skills.some(skill => skill.toLowerCase().includes(searchTerm))
-      );
+        if (!categories || categories.length === 0) {
+          return {
+            contents: [{
+              uri: uri.href,
+              text: "No data categories found. Add some personal data to see categories here.",
+              mimeType: "text/plain"
+            }]
+          };
+        }
 
-      if (matchingUsers.length === 0) {
+        const categoriesList = categories.map((cat: Category) => 
+          `📁 ${cat.display_name} (${cat.item_count} items)
+   Category: ${cat.category_name}
+   Description: ${cat.description}
+   Keywords: ${cat.trigger_words.join(', ')}
+   Query when: ${cat.query_hint}
+   Examples: ${cat.example_queries.join(' | ')}`
+        ).join('\n\n');
+        
         return {
-          content: [{
-            type: "text",
-            text: `No users found matching query: "${query}"`
+          contents: [{
+            uri: uri.href,
+            text: `Available Personal Data Categories:\n\n${categoriesList}`,
+            mimeType: "text/plain"
+          }]
+        };
+      } catch (error) {
+        return {
+          contents: [{
+            uri: uri.href,
+            text: `Database connection error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            mimeType: "text/plain"
           }]
         };
       }
+    }
+  );
 
-      const resultText = matchingUsers.map(user => 
-        `${user.name} (${user.role}) - ${user.department} - ID: ${user.id}`
-      ).join("\n");
+  // Register the search personal data tool
+  server.registerTool(
+    "search-personal-data",
+    {
+      title: "Search Personal Data",
+      description: "Search through personal data by title and content for a specific user",
+      inputSchema: {
+        query: z.string().describe("Search query to find in titles and content"),
+        userId: z.string().describe("User ID (UUID) to search data for"),
+        categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts')"),
+        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Filter by classification level"),
+        limit: z.number().min(1).max(100).default(20).describe("Maximum number of results to return")
+      }
+    },
+    async ({ query, userId, categories, classification, limit = 20 }) => {
+      try {
+        // Remove surrounding quotes if present
+        const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
 
-      const resourceLinks = matchingUsers.map(user => ({
-        type: "resource_link" as const,
-        uri: `users://${user.id}`,
-        name: user.name,
-        description: `${user.role} in ${user.department}`
-      }));
+        const { data: results, error } = await supabase.rpc('search_personal_data', {
+          p_user_id: userId,
+          p_search_text: cleanQuery,
+          p_categories: (categories && categories.length > 0) ? categories : null,
+          p_tags: null,
+          p_classification: classification || null,
+          p_limit: limit,
+          p_offset: 0
+        });
 
-      return {
-        content: [
-          {
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        if (!results || results.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `No personal data found matching query: "${query}"`
+            }]
+          };
+        }
+
+        const resultText = results.map((item: PersonalDataRecord) => {
+          const contentPreview = typeof item.content === 'object' 
+            ? JSON.stringify(item.content, null, 2).substring(0, 200) 
+            : String(item.content).substring(0, 200);
+          
+          return `📄 ${item.title}
+   Category: ${item.category || 'Uncategorized'}
+   Classification: ${item.classification}
+   Tags: ${item.tags?.join(', ') || 'None'}
+   Content: ${contentPreview}${contentPreview.length >= 200 ? '...' : ''}
+   Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
+        }).join('\n\n');
+
+        const resourceLinks = results.map((item: PersonalDataRecord) => ({
+          type: "resource_link" as const,
+          uri: `data://item/${item.id}`,
+          name: item.title,
+          description: `${item.category} - ${item.classification}`
+        }));
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Found ${results.length} items matching "${query}":\n\n${resultText}`
+            },
+            ...resourceLinks
+          ]
+        };
+      } catch (error) {
+        return {
+          content: [{
             type: "text",
-            text: `Found ${matchingUsers.length} users matching "${query}":\n\n${resultText}`
-          },
-          ...resourceLinks
-        ]
-      };
+            text: `Error searching personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the extract personal data tool
+  server.registerTool(
+    "extract-personal-data",
+    {
+      title: "Extract Personal Data by Tags",
+      description: "Extract groups of similar entries by tags from a specific user profile or all profiles. Use when looking for ambiguous categories like \"family members\", \"work contacts\", \"sci-fi books\", or \"health records\".",
+      inputSchema: {
+        tags: z.array(z.string()).min(1).describe("Category tags to find groups of entries (e.g., [\"family\"] for all family members, [\"work\"] for work contacts)"),
+        userId: z.string().optional().describe("Optional: Specify which user profile to extract from. If omitted, searches all profiles."),
+        categories: z.array(z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents'])).optional().describe("Optional: Categories to filter by"),
+        filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
+        limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
+        offset: z.number().min(0).default(0).describe("Pagination offset")
+      }
+    },
+    async ({ tags, userId, categories, filters, limit = 50, offset = 0 }) => {
+      try {
+        const { data: results, error } = await supabase.rpc('extract_personal_data', {
+          p_tags: tags,
+          p_user_id: userId || null,
+          p_categories: (categories && categories.length > 0) ? categories : null,
+          p_filters: filters || null,
+          p_limit: limit,
+          p_offset: offset
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        if (!results || results.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `No personal data found with tags: ${tags.join(', ')}`
+            }]
+          };
+        }
+
+        const resultText = results.map((item: PersonalDataRecord) => {
+          const contentPreview = typeof item.content === 'object' 
+            ? JSON.stringify(item.content, null, 2).substring(0, 200) 
+            : String(item.content).substring(0, 200);
+          
+          return `📄 ${item.title}
+   Category: ${item.category || 'Uncategorized'}
+   Classification: ${item.classification}
+   Tags: ${item.tags?.join(', ') || 'None'}
+   Content: ${contentPreview}${contentPreview.length >= 200 ? '...' : ''}
+   Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
+        }).join('\n\n');
+
+        return {
+          content: [{
+            type: "text",
+            text: `Found ${results.length} items with tags [${tags.join(', ')}]:\n\n${resultText}`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error extracting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the create personal data tool
+  server.registerTool(
+    "create-personal-data",
+    {
+      title: "Create Personal Data",
+      description: "Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.",
+      inputSchema: {
+        userId: z.string().describe("User identifier"),
+        dataType: z.enum(['contact', 'document', 'preference', 'custom', 'book', 'author', 'interest', 'software']).describe("Type of data - will be auto-mapped to appropriate category"),
+        title: z.string().describe("Record title"),
+        content: z.record(z.any()).describe("Record content"),
+        tags: z.array(z.string()).optional().describe("Tags for categorization"),
+        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
+      }
+    },
+    async ({ userId, dataType, title, content, tags, classification = 'personal' }) => {
+      try {
+        // Map data_type to category
+        const categoryMapping: Record<string, string> = {
+          'contact': 'contacts',
+          'document': 'documents',
+          'preference': 'preferences', 
+          'custom': 'basic_information',
+          'book': 'books',
+          'author': 'favorite_authors',
+          'interest': 'interests',
+          'software': 'digital_products'
+        };
+
+        const category = categoryMapping[dataType] || 'basic_information';
+
+        const { data: result, error } = await supabase.rpc('create_personal_data', {
+          p_user_id: userId,
+          p_category: category,
+          p_title: title,
+          p_content: content,
+          p_tags: tags || [],
+          p_classification: classification
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: `Successfully created personal data record: "${title}" in category "${category}"`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error creating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the update personal data tool
+  server.registerTool(
+    "update-personal-data",
+    {
+      title: "Update Personal Data",
+      description: "Automatically update existing personal data records when new or updated information is mentioned. This tool should be called whenever the user provides ANY updated information about previously stored data.",
+      inputSchema: {
+        recordId: z.string().describe("Record identifier to update"),
+        updates: z.record(z.any()).describe("Fields to update"),
+        conversationContext: z.string().optional().describe("The conversation context from which to extract updates (for passive mode)")
+      }
+    },
+    async ({ recordId, updates, conversationContext }) => {
+      try {
+        // Debug logging
+        console.log('Update parameters:', {
+          recordId,
+          updates: JSON.stringify(updates, null, 2),
+          conversationContext
+        });
+
+        const { data: result, error } = await supabase.rpc('update_personal_data', {
+          p_record_id: recordId,
+          p_updates: updates,
+          p_conversation_context: conversationContext || null
+        });
+
+        console.log('Update result:', { result, error });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: `Successfully updated personal data record: ${recordId}`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error updating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the delete personal data tool
+  server.registerTool(
+    "delete-personal-data",
+    {
+      title: "Delete Personal Data",
+      description: "Delete personal data records. Use with caution - supports both soft and hard deletion for GDPR compliance.",
+      inputSchema: {
+        recordIds: z.array(z.string()).min(1).describe("Record identifiers to delete"),
+        hardDelete: z.boolean().default(false).describe("Permanent deletion for GDPR compliance")
+      }
+    },
+    async ({ recordIds, hardDelete = false }) => {
+      try {
+        const { data: result, error } = await supabase.rpc('delete_personal_data', {
+          p_record_ids: recordIds,
+          p_hard_delete: hardDelete
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        const deleteType = hardDelete ? 'permanently deleted' : 'soft deleted';
+        return {
+          content: [{
+            type: "text",
+            text: `Successfully ${deleteType} ${recordIds.length} personal data record(s)`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error deleting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
     }
   );
 
@@ -122,8 +464,8 @@ function createMcpServer(): McpServer {
 }
 
 async function main() {
-  // Load user data
-  await loadUserData();
+  // Initialize database connection
+  await initializeDatabase();
 
   const app = express();
   
@@ -211,13 +553,14 @@ async function main() {
 
   const PORT = 3000;
   app.listen(PORT, () => {
-    console.log(`MCP User Data Server listening on port ${PORT}`);
-    console.log(`Available endpoints:`);
+    console.log(`🚀 MCP Personal Data Server listening on port ${PORT}`);
+    console.log(`🌐 Available endpoints:`);
     console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp`);
-    console.log(`\nResources:`);
-    console.log(`- users://user_ids - List all available user IDs`);
-    console.log(`\nTools:`);
-    console.log(`- search-users - Search users by various criteria`);
+    console.log(`\n📁 Resources:`);
+    console.log(`- data://categories - List available personal data categories`);
+    console.log(`\n🔍 Tools:`);
+    console.log(`- search-personal-data - Search through personal data by title and content`);
+    console.log(`\n💡 Make sure to configure your .env file with database credentials!`);
   });
 }
 
