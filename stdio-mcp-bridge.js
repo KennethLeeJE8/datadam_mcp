@@ -22,6 +22,7 @@
 
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
+const { z } = require("zod");
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
@@ -63,6 +64,31 @@ class StdioMcpBridge {
     if (this.debug) {
       process.stderr.write(`[MCP-Bridge] ${message} ${JSON.stringify(data)}\n`);
     }
+  }
+
+  filterSupportedContent(content) {
+    if (!Array.isArray(content)) return content;
+    
+    return content.map(item => {
+      // Convert unsupported content types to text
+      if (item.type === 'resource_link') {
+        return {
+          type: 'text',
+          text: `Resource: ${item.name || 'Unnamed'}\nURI: ${item.uri}\n${item.description ? `Description: ${item.description}` : ''}`
+        };
+      }
+      
+      // Keep supported content types as-is
+      if (['text', 'image'].includes(item.type)) {
+        return item;
+      }
+      
+      // Convert any other unsupported types to text
+      return {
+        type: 'text',
+        text: JSON.stringify(item, null, 2)
+      };
+    });
   }
 
   async setupMcpServer() {
@@ -142,49 +168,94 @@ class StdioMcpBridge {
   }
 
   async registerFallbackTools() {
-    // Register basic tools based on what we know the server should have
-    const fallbackTools = [
+    // Register tools with proper schemas matching the server
+    this.mcpServer.registerTool(
+      'search-personal-data',
       {
-        name: 'search-personal-data',
-        description: 'Search through personal data by title and content'
-      },
-      {
-        name: 'extract-personal-data', 
-        description: 'Extract groups of similar entries by tags'
-      },
-      {
-        name: 'create-personal-data',
-        description: 'Create new personal data records'
-      },
-      {
-        name: 'update-personal-data',
-        description: 'Update existing personal data records'
-      },
-      {
-        name: 'delete-personal-data',
-        description: 'Delete personal data records'
-      }
-    ];
-
-    for (const tool of fallbackTools) {
-      this.mcpServer.registerTool(
-        tool.name,
-        {
-          title: tool.description,
-          description: tool.description,
-          inputSchema: {
-            type: "object",
-            properties: {},
-            additionalProperties: true
-          }
-        },
-        async (args) => {
-          return await this.callRemoteTool(tool.name, args);
+        title: 'Search Personal Data',
+        description: 'Search through personal data by title and content for a specific user',
+        inputSchema: {
+          query: z.string().describe("Search query to find in titles and content"),
+          userId: z.string().describe("User ID (UUID) to search data for"),
+          categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts')"),
+          classification: z.enum(["public", "personal", "sensitive", "confidential"]).optional().describe("Filter by classification level"),
+          limit: z.number().min(1).max(100).default(20).optional().describe("Maximum number of results to return")
         }
-      );
-    }
+      },
+      async (args) => {
+        return await this.callRemoteTool('search-personal-data', args);
+      }
+    );
 
-    this.log('Registered fallback tools', { count: fallbackTools.length });
+    this.mcpServer.registerTool(
+      'extract-personal-data',
+      {
+        title: 'Extract Personal Data by Tags',
+        description: 'Extract groups of similar entries by tags from a specific user profile or all profiles',
+        inputSchema: {
+          tags: z.array(z.string()).min(1).describe("Category tags to find groups of entries"),
+          userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
+          categories: z.array(z.enum(["contacts", "basic_information", "digital_products", "preferences", "interests", "favorite_authors", "books", "documents"])).optional().describe("Optional: Categories to filter by"),
+          limit: z.number().min(1).max(100).default(50).optional().describe("Maximum number of records"),
+          offset: z.number().min(0).default(0).optional().describe("Pagination offset")
+        }
+      },
+      async (args) => {
+        return await this.callRemoteTool('extract-personal-data', args);
+      }
+    );
+
+    this.mcpServer.registerTool(
+      'create-personal-data',
+      {
+        title: 'Create Personal Data',
+        description: 'Automatically capture and store ANY personal data mentioned in conversations',
+        inputSchema: {
+          userId: z.string().describe("User identifier"),
+          dataType: z.enum(["contact", "document", "preference", "custom", "book", "author", "interest", "software"]).describe("Type of data - will be auto-mapped to appropriate category"),
+          title: z.string().describe("Record title"),
+          content: z.record(z.any()).describe("Record content"),
+          tags: z.array(z.string()).optional().describe("Tags for categorization"),
+          classification: z.enum(["public", "personal", "sensitive", "confidential"]).default("personal").optional().describe("Data classification level")
+        }
+      },
+      async (args) => {
+        return await this.callRemoteTool('create-personal-data', args);
+      }
+    );
+
+    this.mcpServer.registerTool(
+      'update-personal-data',
+      {
+        title: 'Update Personal Data',
+        description: 'Automatically update existing personal data records when new or updated information is mentioned',
+        inputSchema: {
+          recordId: z.string().describe("Record identifier to update"),
+          updates: z.record(z.any()).describe("Fields to update"),
+          conversationContext: z.string().optional().describe("The conversation context from which to extract updates")
+        }
+      },
+      async (args) => {
+        return await this.callRemoteTool('update-personal-data', args);
+      }
+    );
+
+    this.mcpServer.registerTool(
+      'delete-personal-data',
+      {
+        title: 'Delete Personal Data',
+        description: 'Delete personal data records. Use with caution - supports both soft and hard deletion for GDPR compliance',
+        inputSchema: {
+          recordIds: z.array(z.string()).min(1).describe("Record identifiers to delete"),
+          hardDelete: z.boolean().default(false).optional().describe("Permanent deletion for GDPR compliance")
+        }
+      },
+      async (args) => {
+        return await this.callRemoteTool('delete-personal-data', args);
+      }
+    );
+
+    this.log('Registered fallback tools', { count: 5 });
   }
 
   setupHandlers() {
@@ -271,9 +342,9 @@ class StdioMcpBridge {
       // Format the response according to MCP protocol
       let content;
       if (result.result && result.result.content) {
-        content = result.result.content;
+        content = this.filterSupportedContent(result.result.content);
       } else if (result.content) {
-        content = result.content;
+        content = this.filterSupportedContent(result.content);
       } else {
         content = [{
           type: 'text',
