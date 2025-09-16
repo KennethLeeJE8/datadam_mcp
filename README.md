@@ -39,6 +39,30 @@ A Model Context Protocol (MCP) server that provides secure access to your person
 
 ## Usage
 
+### Claude Desktop Integration
+
+To use this MCP server with Claude Desktop, add the following configuration to your Claude Desktop config file at `/Users/kenne/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "datadam": {
+      "command": "node",
+      "args": [
+        "/path/to/your/datadam_mcp/stdio-mcp-bridge.js",
+        "https://datadam-mcp.onrender.com"
+      ],
+      "env": {
+        "DEBUG": "true",
+        "MCP_API_KEY": "INSERT_API_KEY_HERE"
+      }
+    }
+  }
+}
+```
+
+Replace `INSERT_API_KEY_HERE` with your actual API key for the datadam service.
+
 ### Running the Server
 
 #### Development mode (with hot reload):

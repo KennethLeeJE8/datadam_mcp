@@ -12,11 +12,17 @@
  * Claude Desktop Configuration:
  * {
  *   "mcpServers": {
- *     "datadam": {
- *       "command": "node",
- *       "args": ["path/to/stdio-mcp-bridge.js", "https://datadam-mcp.onrender.com"]
- *     }
- *   }
+    "datadam": {
+      "command": "node",
+      "args": [
+        "/path/to/your/datadam_mcp/stdio-mcp-bridge.js",
+        "https://datadam-mcp.onrender.com"
+      ],
+      "env": {
+        "DEBUG": "true",
+        "MCP_API_KEY": "INSERT_API_KEY_HERE"
+      }
+    }
  * }
  */
 
