@@ -479,7 +479,7 @@ async function main() {
   app.use(express.json());
 
   // Health check endpoint for Render
-  app.get('/health', (req, res) => {
+  app.get('/health', (req: express.Request, res: express.Response) => {
     res.status(200).json({ 
       status: 'healthy',
       service: 'MCP Personal Data Server',
@@ -491,7 +491,7 @@ async function main() {
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
   // Handle POST requests for client-to-server communication
-  app.post('/mcp', async (req, res) => {
+  app.post('/mcp', async (req: express.Request, res: express.Response) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     let transport: StreamableHTTPServerTransport;
 
@@ -537,7 +537,7 @@ async function main() {
   });
 
   // Handle GET requests for server-to-client notifications via SSE
-  app.get('/mcp', async (req, res) => {
+  app.get('/mcp', async (req: express.Request, res: express.Response) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (!sessionId || !transports[sessionId]) {
       res.status(400).send('Invalid or missing session ID');
@@ -549,7 +549,7 @@ async function main() {
   });
 
   // Handle DELETE requests for session termination
-  app.delete('/mcp', async (req, res) => {
+  app.delete('/mcp', async (req: express.Request, res: express.Response) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (!sessionId || !transports[sessionId]) {
       res.status(400).send('Invalid or missing session ID');
