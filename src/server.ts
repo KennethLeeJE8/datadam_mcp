@@ -363,9 +363,9 @@ function createMcpServer(): McpServer {
     "update-personal-data",
     {
       title: "Update Personal Data",
-      description: "Automatically update existing personal data records when new or updated information is mentioned. This tool should be called whenever the user provides ANY updated information about previously stored data.",
+      description: "Automatically update existing personal data records when new or updated information is mentioned. Requires the UUID of the specific data record to identify which item to update. This tool should be called whenever the user provides ANY updated information about previously stored data.",
       inputSchema: {
-        recordId: z.string().describe("Record identifier to update"),
+        recordId: z.string().describe("Record identifier (UUID) to update"),
         updates: z.record(z.any()).describe("Fields to update"),
         conversationContext: z.string().optional().describe("The conversation context from which to extract updates (for passive mode)")
       }
@@ -419,9 +419,9 @@ function createMcpServer(): McpServer {
     "delete-personal-data",
     {
       title: "Delete Personal Data",
-      description: "Delete personal data records. Use with caution - supports both soft and hard deletion for GDPR compliance.",
+      description: "Delete personal data records. Requires the UUID(s) of the specific data record(s) to identify which items to delete. Use with caution - supports both soft and hard deletion for GDPR compliance.",
       inputSchema: {
-        recordIds: z.array(z.string()).min(1).describe("Record identifiers to delete"),
+        recordIds: z.array(z.string()).min(1).describe("Record identifiers (UUIDs) to delete"),
         hardDelete: z.boolean().default(false).describe("Permanent deletion for GDPR compliance")
       }
     },
