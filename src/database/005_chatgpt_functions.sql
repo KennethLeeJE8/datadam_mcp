@@ -1,6 +1,10 @@
 -- ChatGPT-specific database functions for MCP integration
 -- These functions are optimized for ChatGPT's search and fetch tool requirements
 
+-- Drop existing functions first
+DROP FUNCTION IF EXISTS chatgpt_search_data(TEXT, UUID, INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS chatgpt_fetch_data(TEXT) CASCADE;
+
 -- Function to search personal data for ChatGPT with specific output format
 CREATE OR REPLACE FUNCTION chatgpt_search_data(
     p_query TEXT,
@@ -10,10 +14,7 @@ CREATE OR REPLACE FUNCTION chatgpt_search_data(
 RETURNS TABLE (
     id TEXT,
     title TEXT,
-    url TEXT,
-    content_preview TEXT,
-    category TEXT,
-    relevance_score FLOAT
+    url TEXT
 ) 
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -28,24 +29,7 @@ BEGIN
             WHEN pd.category = 'contacts' THEN 'https://datadam.example.com/contact/' || pd.id
             WHEN pd.category = 'books' THEN 'https://datadam.example.com/book/' || pd.id
             ELSE 'https://datadam.example.com/item/' || pd.id
-        END as url,
-        CASE 
-            WHEN pd.content IS NOT NULL THEN 
-                LEFT(
-                    CASE 
-                        WHEN jsonb_typeof(pd.content) = 'object' THEN pd.content::TEXT
-                        ELSE pd.content::TEXT
-                    END, 
-                    200
-                ) || CASE WHEN LENGTH(pd.content::TEXT) > 200 THEN '...' ELSE '' END
-            ELSE 'No content available'
-        END as content_preview,
-        COALESCE(pd.category, 'uncategorized')::TEXT as category,
-        -- Simple relevance scoring based on text similarity
-        GREATEST(
-            similarity(LOWER(pd.title), LOWER(p_query)),
-            similarity(LOWER(pd.content::TEXT), LOWER(p_query))
-        ) as relevance_score
+        END as url
     FROM personal_data pd
     WHERE 
         pd.deleted_at IS NULL
@@ -58,7 +42,7 @@ BEGIN
                 WHERE tag ILIKE '%' || p_query || '%'
             )
         )
-    ORDER BY relevance_score DESC, pd.updated_at DESC
+    ORDER BY pd.updated_at DESC
     LIMIT p_limit;
 END;
 $$;
@@ -137,5 +121,5 @@ ON personal_data USING GIN (
 CREATE INDEX IF NOT EXISTS idx_personal_data_chatgpt_tags 
 ON personal_data USING GIN (tags);
 
--- Enable pg_trgm extension for similarity search if not already enabled
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Note: pg_trgm extension removed to avoid dependency issues
+-- If you want similarity scoring, enable it manually: CREATE EXTENSION IF NOT EXISTS pg_trgm;
