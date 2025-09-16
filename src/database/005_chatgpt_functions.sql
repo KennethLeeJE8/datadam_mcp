@@ -36,7 +36,7 @@ BEGIN
         AND (p_user_id IS NULL OR pd.user_id = p_user_id)
         AND (
             pd.title ILIKE '%' || p_query || '%' 
-            OR pd.content::TEXT ILIKE '%' || p_query || '%'
+            OR pd.category ILIKE '%' || p_query || '%'
             OR EXISTS (
                 SELECT 1 FROM unnest(pd.tags) as tag 
                 WHERE tag ILIKE '%' || p_query || '%'
@@ -115,7 +115,7 @@ GRANT EXECUTE ON FUNCTION chatgpt_fetch_data(TEXT) TO anon;
 -- Create indexes to optimize ChatGPT search performance
 CREATE INDEX IF NOT EXISTS idx_personal_data_chatgpt_search 
 ON personal_data USING GIN (
-    to_tsvector('english', title || ' ' || COALESCE(content::TEXT, ''))
+    to_tsvector('english', title || ' ' || COALESCE(category, ''))
 );
 
 CREATE INDEX IF NOT EXISTS idx_personal_data_chatgpt_tags 

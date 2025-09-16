@@ -474,7 +474,7 @@ function createChatGptMcpServer(): McpServer {
     "search",
     {
       title: "Search",
-      description: "Search through personal data and return relevant documents",
+      description: "Search through personal data by matching against title, tags, and categories only (not content). Available categories: contacts, documents, books, basic_information, digital_products, preferences, interests, favorite_authors.",
       inputSchema: {
         query: z.string().describe("Search query to find relevant documents")
       }
@@ -520,7 +520,8 @@ function createChatGptMcpServer(): McpServer {
           content: [{
             type: "text",
             text: JSON.stringify({
-              results: formattedResults
+              results: formattedResults,
+              search_info: "Searched in: title, tags, and categories (not content)"
             })
           }]
         };
@@ -543,7 +544,7 @@ function createChatGptMcpServer(): McpServer {
     "fetch",
     {
       title: "Fetch",
-      description: "Retrieve complete document content by ID",
+      description: "Retrieve complete document content by ID including full text, metadata, and all associated information",
       inputSchema: {
         id: z.string().describe("Document ID to fetch")
       }
