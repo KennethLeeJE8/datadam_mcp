@@ -478,6 +478,15 @@ async function main() {
   
   app.use(express.json());
 
+  // Health check endpoint for Render
+  app.get('/health', (req, res) => {
+    res.status(200).json({ 
+      status: 'healthy',
+      service: 'MCP Personal Data Server',
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // Map to store transports by session ID
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
@@ -551,16 +560,24 @@ async function main() {
     await transport.handleRequest(req, res);
   });
 
-  const PORT = 3000;
-  app.listen(PORT, () => {
-    console.log(`🚀 MCP Personal Data Server listening on port ${PORT}`);
-    console.log(`🌐 Available endpoints:`);
-    console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp`);
-    console.log(`\n📁 Resources:`);
-    console.log(`- data://categories - List available personal data categories`);
-    console.log(`\n🔍 Tools:`);
-    console.log(`- search-personal-data - Search through personal data by title and content`);
-    console.log(`\n💡 Make sure to configure your .env file with database credentials!`);
+  const PORT = process.env.PORT || 3000;
+  const HOST = '0.0.0.0'; // Bind to all interfaces for Render
+  
+  app.listen(Number(PORT), HOST, () => {
+    console.log(`🚀 MCP Personal Data Server listening on ${HOST}:${PORT}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`🔗 Server is ready to accept connections`);
+    } else {
+      console.log(`🌐 Available endpoints:`);
+      console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp`);
+      console.log(`\n📁 Resources:`);
+      console.log(`- data://categories - List available personal data categories`);
+      console.log(`\n🔍 Tools:`);
+      console.log(`- search-personal-data - Search through personal data by title and content`);
+      console.log(`\n💡 Make sure to configure your .env file with database credentials!`);
+    }
   });
 }
 

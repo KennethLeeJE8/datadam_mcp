@@ -22,6 +22,10 @@
     "url": "https://github.com/KennethLeeJE8/datadam_mcp/issues"
   },
   "homepage": "https://github.com/KennethLeeJE8/datadam_mcp#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
     "@supabase/supabase-js": "^2.57.4",
