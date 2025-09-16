@@ -147,17 +147,6 @@ function createMcpServer(): McpServer {
         // Remove surrounding quotes if present
         const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
 
-        // Log to file for debugging
-        const fs = require('fs');
-        const debugInfo = {
-          timestamp: new Date().toISOString(),
-          userId, 
-          cleanQuery, 
-          categories, 
-          classification
-        };
-        fs.appendFileSync('/tmp/mcp_debug.log', JSON.stringify(debugInfo) + '\n');
-
         const { data: results, error } = await supabase.rpc('search_personal_data', {
           p_user_id: userId,
           p_search_text: cleanQuery,
@@ -167,8 +156,6 @@ function createMcpServer(): McpServer {
           p_limit: limit,
           p_offset: 0
         });
-
-        fs.appendFileSync('/tmp/mcp_debug.log', JSON.stringify({ results: results?.length || 0, error: error?.message }) + '\n');
 
         if (error) {
           return {
@@ -222,6 +209,250 @@ function createMcpServer(): McpServer {
           content: [{
             type: "text",
             text: `Error searching personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the extract personal data tool
+  server.registerTool(
+    "extract-personal-data",
+    {
+      title: "Extract Personal Data by Tags",
+      description: "Extract groups of similar entries by tags from a specific user profile or all profiles. Use when looking for ambiguous categories like \"family members\", \"work contacts\", \"sci-fi books\", or \"health records\".",
+      inputSchema: {
+        tags: z.array(z.string()).min(1).describe("Category tags to find groups of entries (e.g., [\"family\"] for all family members, [\"work\"] for work contacts)"),
+        userId: z.string().optional().describe("Optional: Specify which user profile to extract from. If omitted, searches all profiles."),
+        categories: z.array(z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents'])).optional().describe("Optional: Categories to filter by"),
+        filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
+        limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
+        offset: z.number().min(0).default(0).describe("Pagination offset")
+      }
+    },
+    async ({ tags, userId, categories, filters, limit = 50, offset = 0 }) => {
+      try {
+        const { data: results, error } = await supabase.rpc('extract_personal_data', {
+          p_tags: tags,
+          p_user_id: userId || null,
+          p_categories: (categories && categories.length > 0) ? categories : null,
+          p_filters: filters || null,
+          p_limit: limit,
+          p_offset: offset
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        if (!results || results.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `No personal data found with tags: ${tags.join(', ')}`
+            }]
+          };
+        }
+
+        const resultText = results.map((item: PersonalDataRecord) => {
+          const contentPreview = typeof item.content === 'object' 
+            ? JSON.stringify(item.content, null, 2).substring(0, 200) 
+            : String(item.content).substring(0, 200);
+          
+          return `📄 ${item.title}
+   Category: ${item.category || 'Uncategorized'}
+   Classification: ${item.classification}
+   Tags: ${item.tags?.join(', ') || 'None'}
+   Content: ${contentPreview}${contentPreview.length >= 200 ? '...' : ''}
+   Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
+        }).join('\n\n');
+
+        return {
+          content: [{
+            type: "text",
+            text: `Found ${results.length} items with tags [${tags.join(', ')}]:\n\n${resultText}`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error extracting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the create personal data tool
+  server.registerTool(
+    "create-personal-data",
+    {
+      title: "Create Personal Data",
+      description: "Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.",
+      inputSchema: {
+        userId: z.string().describe("User identifier"),
+        dataType: z.enum(['contact', 'document', 'preference', 'custom', 'book', 'author', 'interest', 'software']).describe("Type of data - will be auto-mapped to appropriate category"),
+        title: z.string().describe("Record title"),
+        content: z.record(z.any()).describe("Record content"),
+        tags: z.array(z.string()).optional().describe("Tags for categorization"),
+        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
+      }
+    },
+    async ({ userId, dataType, title, content, tags, classification = 'personal' }) => {
+      try {
+        // Map data_type to category
+        const categoryMapping: Record<string, string> = {
+          'contact': 'contacts',
+          'document': 'documents',
+          'preference': 'preferences', 
+          'custom': 'basic_information',
+          'book': 'books',
+          'author': 'favorite_authors',
+          'interest': 'interests',
+          'software': 'digital_products'
+        };
+
+        const category = categoryMapping[dataType] || 'basic_information';
+
+        const { data: result, error } = await supabase.rpc('create_personal_data', {
+          p_user_id: userId,
+          p_category: category,
+          p_title: title,
+          p_content: content,
+          p_tags: tags || [],
+          p_classification: classification
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: `Successfully created personal data record: "${title}" in category "${category}"`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error creating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the update personal data tool
+  server.registerTool(
+    "update-personal-data",
+    {
+      title: "Update Personal Data",
+      description: "Automatically update existing personal data records when new or updated information is mentioned. This tool should be called whenever the user provides ANY updated information about previously stored data.",
+      inputSchema: {
+        recordId: z.string().describe("Record identifier to update"),
+        updates: z.record(z.any()).describe("Fields to update"),
+        conversationContext: z.string().optional().describe("The conversation context from which to extract updates (for passive mode)")
+      }
+    },
+    async ({ recordId, updates, conversationContext }) => {
+      try {
+        // Debug logging
+        console.log('Update parameters:', {
+          recordId,
+          updates: JSON.stringify(updates, null, 2),
+          conversationContext
+        });
+
+        const { data: result, error } = await supabase.rpc('update_personal_data', {
+          p_record_id: recordId,
+          p_updates: updates,
+          p_conversation_context: conversationContext || null
+        });
+
+        console.log('Update result:', { result, error });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: `Successfully updated personal data record: ${recordId}`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error updating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the delete personal data tool
+  server.registerTool(
+    "delete-personal-data",
+    {
+      title: "Delete Personal Data",
+      description: "Delete personal data records. Use with caution - supports both soft and hard deletion for GDPR compliance.",
+      inputSchema: {
+        recordIds: z.array(z.string()).min(1).describe("Record identifiers to delete"),
+        hardDelete: z.boolean().default(false).describe("Permanent deletion for GDPR compliance")
+      }
+    },
+    async ({ recordIds, hardDelete = false }) => {
+      try {
+        const { data: result, error } = await supabase.rpc('delete_personal_data', {
+          p_record_ids: recordIds,
+          p_hard_delete: hardDelete
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: `Database error: ${error.message}`
+            }]
+          };
+        }
+
+        const deleteType = hardDelete ? 'permanently deleted' : 'soft deleted';
+        return {
+          content: [{
+            type: "text",
+            text: `Successfully ${deleteType} ${recordIds.length} personal data record(s)`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error deleting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
           }],
           isError: true
         };
