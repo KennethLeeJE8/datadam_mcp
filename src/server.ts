@@ -55,7 +55,7 @@ async function initializeDatabase(): Promise<void> {
     }
     
     console.log(`✅ Connected to Supabase successfully`);
-    console.log(`📊 Database stats:`, data?.[0] || 'No data');
+    console.log(`Database stats:`, data?.[0] || 'No data');
   } catch (error) {
     console.error("❌ Error connecting to database:", error);
     throw error;
@@ -101,7 +101,7 @@ function createMcpServer(): McpServer {
         }
 
         const categoriesList = categories.map((cat: Category) => 
-          `📁 ${cat.display_name} (${cat.item_count} items)
+          `${cat.display_name} (${cat.item_count} items)
    Category: ${cat.category_name}
    Description: ${cat.description}
    Keywords: ${cat.trigger_words.join(', ')}
@@ -180,7 +180,7 @@ function createMcpServer(): McpServer {
             ? JSON.stringify(item.content, null, 2).substring(0, 200) 
             : String(item.content).substring(0, 200);
           
-          return `📄 ${item.title}
+          return `${item.title}
    Category: ${item.category || 'Uncategorized'}
    Classification: ${item.classification}
    Tags: ${item.tags?.join(', ') || 'None'}
@@ -265,7 +265,7 @@ function createMcpServer(): McpServer {
             ? JSON.stringify(item.content, null, 2).substring(0, 200) 
             : String(item.content).substring(0, 200);
           
-          return `📄 ${item.title}
+          return `${item.title}
    Category: ${item.category || 'Uncategorized'}
    Classification: ${item.classification}
    Tags: ${item.tags?.join(', ') || 'None'}
@@ -572,7 +572,7 @@ async function main() {
     } else {
       console.log(`🌐 Available endpoints:`);
       console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp`);
-      console.log(`\n📁 Resources:`);
+      console.log(`\nResources:`);
       console.log(`- data://categories - List available personal data categories`);
       console.log(`\n🔍 Tools:`);
       console.log(`- search-personal-data - Search through personal data by title and content`);
