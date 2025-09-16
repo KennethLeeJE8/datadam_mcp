@@ -463,6 +463,153 @@ function createMcpServer(): McpServer {
   return server;
 }
 
+function createChatGptMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "chatgpt-mcp-server",
+    version: "1.0.0"
+  });
+
+  // Register the search tool for ChatGPT
+  server.registerTool(
+    "search",
+    {
+      title: "Search",
+      description: "Search through personal data and return relevant documents",
+      inputSchema: {
+        query: z.string().describe("Search query to find relevant documents")
+      }
+    },
+    async ({ query }) => {
+      try {
+        const { data: results, error } = await supabase.rpc('chatgpt_search_data', {
+          p_query: query,
+          p_user_id: null, // Search across all users for ChatGPT
+          p_limit: 10
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: `Database error: ${error.message}`
+              })
+            }]
+          };
+        }
+
+        if (!results || results.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                results: []
+              })
+            }]
+          };
+        }
+
+        // Format results according to ChatGPT specification
+        const formattedResults = results.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          url: item.url
+        }));
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              results: formattedResults
+            })
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: `Error searching data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            })
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the fetch tool for ChatGPT
+  server.registerTool(
+    "fetch",
+    {
+      title: "Fetch",
+      description: "Retrieve complete document content by ID",
+      inputSchema: {
+        id: z.string().describe("Document ID to fetch")
+      }
+    },
+    async ({ id }) => {
+      try {
+        const { data: results, error } = await supabase.rpc('chatgpt_fetch_data', {
+          p_document_id: id
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: `Database error: ${error.message}`
+              })
+            }]
+          };
+        }
+
+        if (!results || results.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: `Document not found: ${id}`
+              })
+            }]
+          };
+        }
+
+        const doc = results[0];
+        
+        // Format result according to ChatGPT specification
+        const formattedResult = {
+          id: doc.id,
+          title: doc.title,
+          text: doc.text,
+          url: doc.url,
+          metadata: doc.metadata
+        };
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(formattedResult)
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: `Error fetching document: ${error instanceof Error ? error.message : 'Unknown error'}`
+            })
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  return server;
+}
+
 async function main() {
   // Initialize database connection
   await initializeDatabase();
@@ -489,6 +636,9 @@ async function main() {
 
   // Map to store transports by session ID
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+  
+  // Separate transport map for ChatGPT endpoint
+  const chatgptTransports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
   // Handle POST requests for client-to-server communication
   app.post('/mcp', async (req: express.Request, res: express.Response) => {
@@ -560,6 +710,77 @@ async function main() {
     await transport.handleRequest(req, res);
   });
 
+  // ChatGPT-specific endpoint routes
+  // Handle POST requests for ChatGPT client-to-server communication
+  app.post('/chatgpt_mcp', async (req: express.Request, res: express.Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    let transport: StreamableHTTPServerTransport;
+
+    if (sessionId && chatgptTransports[sessionId]) {
+      // Reuse existing transport
+      transport = chatgptTransports[sessionId];
+    } else if (!sessionId && isInitializeRequest(req.body)) {
+      // New initialization request
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sessionId) => {
+          chatgptTransports[sessionId] = transport;
+          console.log(`New ChatGPT session initialized: ${sessionId}`);
+        },
+        enableDnsRebindingProtection: false,
+      });
+
+      // Clean up transport when closed
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          console.log(`ChatGPT session closed: ${transport.sessionId}`);
+          delete chatgptTransports[transport.sessionId];
+        }
+      };
+
+      const server = createChatGptMcpServer();
+      await server.connect(transport);
+    } else {
+      // Invalid request
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: No valid session ID provided',
+        },
+        id: null,
+      });
+      return;
+    }
+
+    // Handle the request
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  // Handle GET requests for ChatGPT server-to-client notifications via SSE
+  app.get('/chatgpt_mcp', async (req: express.Request, res: express.Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId || !chatgptTransports[sessionId]) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+    
+    const transport = chatgptTransports[sessionId];
+    await transport.handleRequest(req, res);
+  });
+
+  // Handle DELETE requests for ChatGPT session termination
+  app.delete('/chatgpt_mcp', async (req: express.Request, res: express.Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId || !chatgptTransports[sessionId]) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+    
+    const transport = chatgptTransports[sessionId];
+    await transport.handleRequest(req, res);
+  });
+
   const PORT = process.env.PORT || 3000;
   const HOST = '0.0.0.0'; // Bind to all interfaces for Render
   
@@ -571,11 +792,19 @@ async function main() {
       console.log(`🔗 Server is ready to accept connections`);
     } else {
       console.log(`🌐 Available endpoints:`);
-      console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp`);
+      console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp (Full MCP server)`);
+      console.log(`- POST/GET/DELETE http://localhost:${PORT}/chatgpt_mcp (ChatGPT connector)`);
       console.log(`\nResources:`);
       console.log(`- data://categories - List available personal data categories`);
-      console.log(`\n🔍 Tools:`);
+      console.log(`\n🔍 Main Tools:`);
       console.log(`- search-personal-data - Search through personal data by title and content`);
+      console.log(`- extract-personal-data - Extract data by tags`);
+      console.log(`- create-personal-data - Create new personal data records`);
+      console.log(`- update-personal-data - Update existing records`);
+      console.log(`- delete-personal-data - Delete records`);
+      console.log(`\n🤖 ChatGPT Tools:`);
+      console.log(`- search - Search for documents (ChatGPT format)`);
+      console.log(`- fetch - Fetch complete document content (ChatGPT format)`);
       console.log(`\n💡 Make sure to configure your .env file with database credentials!`);
     }
   });
