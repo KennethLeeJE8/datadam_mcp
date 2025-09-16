@@ -11,6 +11,14 @@ import * as dotenv from "dotenv";
 // Load environment variables
 dotenv.config();
 
+// Validate required environment variables
+const MCP_API_KEY = process.env.MCP_API_KEY;
+if (!MCP_API_KEY) {
+  console.error("❌ MCP_API_KEY environment variable is required for authentication");
+  console.error("💡 Generate an API key by running: npm run generate-key");
+  process.exit(1);
+}
+
 interface PersonalDataRecord {
   id: string;
   user_id: string;
@@ -35,6 +43,48 @@ interface Category {
 }
 
 let supabase: SupabaseClient;
+
+// Authentication middleware
+function authenticateAPIKey(req: express.Request, res: express.Response, next: express.NextFunction) {
+  // Skip authentication for health check endpoint
+  if (req.path === '/health') {
+    return next();
+  }
+
+  // Get API key from Authorization header (Bearer token) or X-API-Key header
+  const authHeader = req.headers.authorization;
+  const apiKeyHeader = req.headers['x-api-key'] as string;
+  
+  let providedApiKey: string | undefined;
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    providedApiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
+  } else if (apiKeyHeader) {
+    providedApiKey = apiKeyHeader;
+  }
+
+  if (!providedApiKey) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'API key required. Provide it via Authorization: Bearer <key> or X-API-Key header.',
+      code: 'MISSING_API_KEY'
+    });
+  }
+
+  if (providedApiKey !== MCP_API_KEY) {
+    return res.status(401).json({
+      error: 'Unauthorized', 
+      message: 'Invalid API key provided.',
+      code: 'INVALID_API_KEY'
+    });
+  }
+
+  // API key is valid, log successful authentication
+  console.log(`🔑 Authenticated request to ${req.method} ${req.path}`);
+  
+  // Proceed to next middleware
+  next();
+}
 
 async function initializeDatabase(): Promise<void> {
   try {
@@ -473,10 +523,13 @@ async function main() {
   app.use(cors({
     origin: '*',
     exposedHeaders: ['Mcp-Session-Id'],
-    allowedHeaders: ['Content-Type', 'mcp-session-id'],
+    allowedHeaders: ['Content-Type', 'mcp-session-id', 'Authorization', 'X-API-Key'],
   }));
   
   app.use(express.json());
+
+  // Apply API key authentication to all routes
+  app.use(authenticateAPIKey);
 
   // Health check endpoint for Render
   app.get('/health', (req: express.Request, res: express.Response) => {
@@ -566,17 +619,22 @@ async function main() {
   app.listen(Number(PORT), HOST, () => {
     console.log(`🚀 MCP Personal Data Server listening on ${HOST}:${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔐 Authentication: API Key enabled`);
     
     if (process.env.NODE_ENV === 'production') {
       console.log(`🔗 Server is ready to accept connections`);
     } else {
       console.log(`🌐 Available endpoints:`);
-      console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp`);
+      console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp (requires API key)`);
+      console.log(`- GET http://localhost:${PORT}/health (public)`);
       console.log(`\n📁 Resources:`);
       console.log(`- data://categories - List available personal data categories`);
       console.log(`\n🔍 Tools:`);
       console.log(`- search-personal-data - Search through personal data by title and content`);
-      console.log(`\n💡 Make sure to configure your .env file with database credentials!`);
+      console.log(`\n🔐 Authentication:`);
+      console.log(`- Include API key in Authorization: Bearer <key> header`);
+      console.log(`- Or use X-API-Key: <key> header`);
+      console.log(`\n💡 Generate API key: npm run generate-key`);
     }
   });
 }

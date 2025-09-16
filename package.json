@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "inspector": "mcp-inspector",
+    "generate-key": "node scripts/generate-api-key.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
