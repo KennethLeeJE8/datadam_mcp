@@ -16,6 +16,7 @@ RETURNS TABLE (
     relevance_score FLOAT
 ) 
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 BEGIN
     RETURN QUERY
@@ -74,6 +75,7 @@ RETURNS TABLE (
     metadata JSONB
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 DECLARE
     doc_record RECORD;
@@ -120,9 +122,11 @@ BEGIN
 END;
 $$;
 
--- Grant execute permissions
+-- Grant execute permissions for authenticated users and anonymous (ChatGPT) access
 GRANT EXECUTE ON FUNCTION chatgpt_search_data(TEXT, UUID, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION chatgpt_fetch_data(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION chatgpt_search_data(TEXT, UUID, INTEGER) TO anon;
+GRANT EXECUTE ON FUNCTION chatgpt_fetch_data(TEXT) TO anon;
 
 -- Create indexes to optimize ChatGPT search performance
 CREATE INDEX IF NOT EXISTS idx_personal_data_chatgpt_search 
