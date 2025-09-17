@@ -35,14 +35,26 @@ BEGIN
         pd.deleted_at IS NULL
         AND (p_user_id IS NULL OR pd.user_id = p_user_id)
         AND (
-            pd.title ILIKE '%' || p_query || '%' 
+            -- Title search (partial match)
+            pd.title ILIKE '%' || p_query || '%'
+            -- Category search (exact match first, then partial)
+            OR pd.category = LOWER(p_query)
             OR pd.category ILIKE '%' || p_query || '%'
+            -- Tag search (exact match first, then partial)
             OR EXISTS (
                 SELECT 1 FROM unnest(pd.tags) as tag 
-                WHERE tag ILIKE '%' || p_query || '%'
+                WHERE tag = LOWER(p_query) OR tag ILIKE '%' || p_query || '%'
             )
         )
-    ORDER BY pd.updated_at DESC
+    ORDER BY 
+        -- Prioritize exact matches
+        CASE 
+            WHEN pd.category = LOWER(p_query) THEN 1
+            WHEN EXISTS (SELECT 1 FROM unnest(pd.tags) as tag WHERE tag = LOWER(p_query)) THEN 2
+            WHEN pd.title ILIKE p_query THEN 3
+            ELSE 4
+        END,
+        pd.updated_at DESC
     LIMIT p_limit;
 END;
 $$;

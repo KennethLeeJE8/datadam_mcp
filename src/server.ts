@@ -217,13 +217,15 @@ function createMcpServer(): McpServer {
   );
 
   // Register the extract personal data tool
+  // NOTE: Categories should be plural where grammatically appropriate (contacts, books, documents)
+  // Tags should always use singular forms (family, work, sci-fi, personal)
   server.registerTool(
     "extract-personal-data",
     {
       title: "Extract Personal Data by Tags",
       description: "Extract groups of similar entries by tags from a specific user profile or all profiles. Use categories for broad collection retrieval (e.g., all books, all contacts) and tags for specific filtering (e.g., 'family' contacts, 'sci-fi' books). Combine both for precise results or use either one independently based on the user's request.",
       inputSchema: {
-        tags: z.array(z.string()).min(1).describe("Tags for specific filtering within or across categories (e.g., ['family'] for family members, ['sci-fi'] for sci-fi books). Use alone for targeted extraction or combine with categories for precise filtering"),
+        tags: z.array(z.string()).min(1).describe("Tags for specific filtering within or across categories (e.g., ['family'], ['work'], ['sci-fi']). Use singular forms for tags. Use alone for targeted extraction or combine with categories for precise filtering"),
         userId: z.string().optional().describe("Optional: Specify which user profile to extract from. If omitted, searches all profiles."),
         categories: z.array(z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents'])).optional().describe("Optional: Use for broad collection retrieval (e.g., 'books' for all books, 'contacts' for all contacts). Can be combined with tags for refined filtering or used alone for category-wide extraction"),
         filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
@@ -302,7 +304,7 @@ function createMcpServer(): McpServer {
         dataType: z.enum(['contact', 'document', 'preference', 'custom', 'book', 'author', 'interest', 'software']).describe("Type of data - will be auto-mapped to appropriate category"),
         title: z.string().describe("Record title"),
         content: z.record(z.any()).describe("Record content"),
-        tags: z.array(z.string()).optional().describe("Tags for categorization"),
+        tags: z.array(z.string()).optional().describe("Tags for categorization (use singular forms: 'family', 'work', 'personal', etc.)"),
         classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
       }
     },
