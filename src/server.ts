@@ -220,23 +220,23 @@ function createMcpServer(): McpServer {
   server.registerTool(
     "extract-personal-data",
     {
-      title: "Extract Personal Data by Tags",
-      description: "Extract groups of similar entries by tags from a specific user profile or all profiles. Use categories for broad collection retrieval (e.g., all books, all contacts) and tags for specific filtering (e.g., 'family' contacts, 'sci-fi' books). Combine both for precise results or use either one independently based on the user's request.",
+      title: "Extract Personal Data by Category",
+      description: "Extract collections of similar items by category (e.g., all books, all contacts). Use tags as optional filters to narrow down results within categories (e.g., 'family' within contacts, 'sci-fi' within books). Categories are broad collections, while tags provide specific metadata filtering.",
       inputSchema: {
-        tags: z.array(z.string()).min(1).describe("Tags for specific filtering within or across categories (e.g., ['family'] for family members, ['sci-fi'] for sci-fi books). Use alone for targeted extraction or combine with categories for precise filtering"),
+        category: z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents']).describe("Required: Single category to extract from (e.g., 'books' for all books, 'contacts' for all contacts)"),
+        tags: z.array(z.string()).optional().describe("Optional: Additional metadata filters to narrow results within the selected categories (e.g., ['family'], ['work'], ['sci-fi']). Do not use category names as tags."),
         userId: z.string().optional().describe("Optional: Specify which user profile to extract from. If omitted, searches all profiles."),
-        categories: z.array(z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents'])).optional().describe("Optional: Use for broad collection retrieval (e.g., 'books' for all books, 'contacts' for all contacts). Can be combined with tags for refined filtering or used alone for category-wide extraction"),
         filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
         limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
         offset: z.number().min(0).default(0).describe("Pagination offset")
       }
     },
-    async ({ tags, userId, categories, filters, limit = 50, offset = 0 }) => {
+    async ({ category, tags, userId, filters, limit = 50, offset = 0 }) => {
       try {
         const { data: results, error } = await supabase.rpc('extract_personal_data', {
-          p_tags: tags,
+          p_tags: (tags && tags.length > 0) ? tags : null,
           p_user_id: userId || null,
-          p_categories: (categories && categories.length > 0) ? categories : null,
+          p_categories: [category],
           p_filters: filters || null,
           p_limit: limit,
           p_offset: offset
@@ -255,7 +255,7 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `No personal data found with tags: ${tags.join(', ')}`
+              text: `No personal data found in category: ${category}${tags ? ` with tags: ${tags.join(', ')}` : ''}`
             }]
           };
         }
@@ -276,7 +276,7 @@ function createMcpServer(): McpServer {
         return {
           content: [{
             type: "text",
-            text: `Found ${results.length} items with tags [${tags.join(', ')}]:\n\n${resultText}`
+            text: `Found ${results.length} items in category '${category}'${tags ? ` with tags [${tags.join(', ')}]` : ''}:\n\n${resultText}`
           }]
         };
       } catch (error) {
@@ -299,28 +299,15 @@ function createMcpServer(): McpServer {
       description: "Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.",
       inputSchema: {
         userId: z.string().describe("User identifier"),
-        dataType: z.enum(['contact', 'document', 'preference', 'custom', 'book', 'author', 'interest', 'software']).describe("Type of data - will be auto-mapped to appropriate category"),
+        category: z.enum(['contacts', 'documents', 'preferences', 'basic_information', 'books', 'favorite_authors', 'interests', 'digital_products']).describe("Category of personal data to store"),
         title: z.string().describe("Record title"),
         content: z.record(z.any()).describe("Record content"),
         tags: z.array(z.string()).optional().describe("Tags for categorization"),
         classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
       }
     },
-    async ({ userId, dataType, title, content, tags, classification = 'personal' }) => {
+    async ({ userId, category, title, content, tags, classification = 'personal' }) => {
       try {
-        // Map data_type to category
-        const categoryMapping: Record<string, string> = {
-          'contact': 'contacts',
-          'document': 'documents',
-          'preference': 'preferences', 
-          'custom': 'basic_information',
-          'book': 'books',
-          'author': 'favorite_authors',
-          'interest': 'interests',
-          'software': 'digital_products'
-        };
-
-        const category = categoryMapping[dataType] || 'basic_information';
 
         const { data: result, error } = await supabase.rpc('create_personal_data', {
           p_user_id: userId,
