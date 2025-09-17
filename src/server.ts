@@ -221,11 +221,11 @@ function createMcpServer(): McpServer {
     "extract-personal-data",
     {
       title: "Extract Personal Data by Tags",
-      description: "Extract groups of similar entries by tags from a specific user profile or all profiles. Use when looking for ambiguous categories like \"family members\", \"work contacts\", \"sci-fi books\", or \"health records\".",
+      description: "Extract groups of similar entries by tags from a specific user profile or all profiles. Use categories for broad collection retrieval (e.g., all books, all contacts) and tags for specific filtering (e.g., 'family' contacts, 'sci-fi' books). Combine both for precise results or use either one independently based on the user's request.",
       inputSchema: {
-        tags: z.array(z.string()).min(1).describe("Category tags to find groups of entries (e.g., [\"family\"] for all family members, [\"work\"] for work contacts)"),
+        tags: z.array(z.string()).min(1).describe("Tags for specific filtering within or across categories (e.g., ['family'] for family members, ['sci-fi'] for sci-fi books). Use alone for targeted extraction or combine with categories for precise filtering"),
         userId: z.string().optional().describe("Optional: Specify which user profile to extract from. If omitted, searches all profiles."),
-        categories: z.array(z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents'])).optional().describe("Optional: Categories to filter by"),
+        categories: z.array(z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents'])).optional().describe("Optional: Use for broad collection retrieval (e.g., 'books' for all books, 'contacts' for all contacts). Can be combined with tags for refined filtering or used alone for category-wide extraction"),
         filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
         limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
         offset: z.number().min(0).default(0).describe("Pagination offset")
@@ -363,9 +363,9 @@ function createMcpServer(): McpServer {
     "update-personal-data",
     {
       title: "Update Personal Data",
-      description: "Automatically update existing personal data records when new or updated information is mentioned. This tool should be called whenever the user provides ANY updated information about previously stored data.",
+      description: "Automatically update existing personal data records when new or updated information is mentioned. Requires the UUID of the specific data record to identify which item to update. This tool should be called whenever the user provides ANY updated information about previously stored data.",
       inputSchema: {
-        recordId: z.string().describe("Record identifier to update"),
+        recordId: z.string().describe("Record identifier (UUID) to update"),
         updates: z.record(z.any()).describe("Fields to update"),
         conversationContext: z.string().optional().describe("The conversation context from which to extract updates (for passive mode)")
       }
@@ -419,9 +419,9 @@ function createMcpServer(): McpServer {
     "delete-personal-data",
     {
       title: "Delete Personal Data",
-      description: "Delete personal data records. Use with caution - supports both soft and hard deletion for GDPR compliance.",
+      description: "Delete personal data records. Requires the UUID(s) of the specific data record(s) to identify which items to delete. Use with caution - supports both soft and hard deletion for GDPR compliance.",
       inputSchema: {
-        recordIds: z.array(z.string()).min(1).describe("Record identifiers to delete"),
+        recordIds: z.array(z.string()).min(1).describe("Record identifiers (UUIDs) to delete"),
         hardDelete: z.boolean().default(false).describe("Permanent deletion for GDPR compliance")
       }
     },
