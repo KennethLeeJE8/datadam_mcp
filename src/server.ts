@@ -281,7 +281,7 @@ function createMcpServer(): McpServer {
         return {
           content: [{
             type: "text",
-            text: `Found ${results.length} items with tags [${tags.join(', ')}]:\n\n${resultText}`
+            text: `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${resultText}`
           }]
         };
       } catch (error) {
