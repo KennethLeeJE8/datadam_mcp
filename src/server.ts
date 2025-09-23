@@ -35,6 +35,21 @@ interface Category {
 }
 
 let supabase: SupabaseClient;
+let availableCategories: string[] = [];
+
+async function fetchAvailableCategories(): Promise<string[]> {
+  try {
+    const { data: categories, error } = await supabase.rpc('get_active_categories');
+    if (error) {
+      console.error("Error fetching categories:", error);
+      return [];
+    }
+    return categories?.map((cat: Category) => cat.category_name) || [];
+  } catch (error) {
+    console.error("Failed to fetch categories:", error);
+    return [];
+  }
+}
 
 async function initializeDatabase(): Promise<void> {
   try {
@@ -46,6 +61,10 @@ async function initializeDatabase(): Promise<void> {
     }
 
     supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Fetch initial categories
+    availableCategories = await fetchAvailableCategories();
+    console.log("Available categories:", availableCategories);
     
     // Test the connection by fetching category stats
     const { data, error } = await supabase.rpc('get_category_stats');
@@ -133,11 +152,11 @@ function createMcpServer(): McpServer {
     "search-personal-data",
     {
       title: "Search Personal Data",
-      description: "Search through personal data by title and content for a specific user",
+      description: "Search through personal data by title and content for a specific user. IMPORTANT: This tool should be triggered when users mention 'my' followed by any category name (e.g., 'my books', 'my contacts', 'my preferences', 'my documents', 'my favorite authors', etc.) as this indicates they want a personalized response based on their stored data. Also trigger for queries about personal information, preferences, or any stored user data.",
       inputSchema: {
-        query: z.string().describe("Search query to find in titles and content"),
+        query: z.string().describe("Search query to find in titles and content. For 'my {category}' queries, extract the relevant search term or use the category name itself"),
         userId: z.string().describe("User ID (UUID) to search data for"),
-        categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts')"),
+        categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts'). When user says 'my {category}', include that category here"),
         classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Filter by classification level"),
         limit: z.number().min(1).max(100).default(20).describe("Maximum number of results to return")
       }
@@ -146,6 +165,21 @@ function createMcpServer(): McpServer {
       try {
         // Remove surrounding quotes if present
         const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
+        
+        // Detect "my {category}" pattern and auto-categorize if not already specified
+        const myPattern = /\bmy\s+(\w+)/gi;
+        const matches = cleanQuery.match(myPattern);
+        
+        if (matches && (!categories || categories.length === 0)) {
+          // Extract potential category from "my X" pattern
+          const potentialCategory = matches[0].replace(/\bmy\s+/i, '').toLowerCase();
+          
+          // Check if it matches any available categories
+          if (availableCategories.includes(potentialCategory)) {
+            categories = [potentialCategory];
+            console.log(`Auto-detected category from "my ${potentialCategory}" pattern`);
+          }
+        }
 
         const { data: results, error } = await supabase.rpc('search_personal_data', {
           p_user_id: userId,
@@ -217,15 +251,31 @@ function createMcpServer(): McpServer {
   );
 
   // Register the extract personal data tool
+  // NOTE: Categories should be plural where grammatically appropriate (contacts, books, documents)
+  // Tags should always use singular forms (family, work, sci-fi, personal)
+  
+  // Create category schema dynamically
+  const getCategorySchema = () => {
+    if (availableCategories.length > 0) {
+      // Use enum when categories are available for better UI experience
+      return z.enum(availableCategories as [string, ...string[]]).describe(
+        `Select a category to filter by. Available categories: ${availableCategories.join(', ')}`
+      );
+    } else {
+      // Fallback to string when categories aren't loaded yet
+      return z.string().describe("Category to filter by (categories are loaded dynamically from database)");
+    }
+  };
+  
   server.registerTool(
     "extract-personal-data",
     {
       title: "Extract Personal Data by Category",
-      description: "Extract collections of similar items by category (e.g., all books, all contacts). Use tags as optional filters to narrow down results within categories (e.g., 'family' within contacts, 'sci-fi' within books). Categories are broad collections, while tags provide specific metadata filtering.",
+      description: "Extract groups of similar entries by category from a specific user profile or all profiles. TRIGGER: Use this tool when users ask for 'my {category}' (e.g., 'my books', 'my contacts') to retrieve all items in that category. A single category is mandatory for broad collection retrieval. Tags are optional and used for further filtering within the category (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). This complements the search tool for category-specific retrieval.",
       inputSchema: {
-        category: z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents']).describe("Required: Single category to extract from (e.g., 'books' for all books, 'contacts' for all contacts)"),
-        tags: z.array(z.string()).optional().describe("Optional: Additional metadata filters to narrow results within the selected categories (e.g., ['family'], ['work'], ['sci-fi']). Do not use category names as tags."),
-        userId: z.string().optional().describe("Optional: Specify which user profile to extract from. If omitted, searches all profiles."),
+        category: getCategorySchema(),
+        tags: z.array(z.string()).optional().describe("Optional: Multiple tags to filter entries within the category. Tags are used for further filtering (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). Use singular forms for tags."),
+        userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
         filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
         limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
         offset: z.number().min(0).default(0).describe("Pagination offset")
@@ -233,10 +283,26 @@ function createMcpServer(): McpServer {
     },
     async ({ category, tags, userId, filters, limit = 50, offset = 0 }) => {
       try {
+        // Refresh categories before processing
+        const latestCategories = await fetchAvailableCategories();
+        if (latestCategories.length > 0) {
+          availableCategories = latestCategories;
+        }
+        
+        // Validate category against latest list
+        if (availableCategories.length > 0 && !availableCategories.includes(category)) {
+          return {
+            content: [{
+              type: "text",
+              text: `Invalid category "${category}". Available categories: ${availableCategories.join(', ')}`
+            }],
+            isError: true
+          };
+        }
         const { data: results, error } = await supabase.rpc('extract_personal_data', {
+          p_category: category,
           p_tags: (tags && tags.length > 0) ? tags : null,
           p_user_id: userId || null,
-          p_categories: [category],
           p_filters: filters || null,
           p_limit: limit,
           p_offset: offset
@@ -252,10 +318,13 @@ function createMcpServer(): McpServer {
         }
 
         if (!results || results.length === 0) {
+          const filterInfo = tags && tags.length > 0 
+            ? ` in category: ${category} with tags: ${tags.join(', ')}`
+            : ` in category: ${category}`;
           return {
             content: [{
               type: "text",
-              text: `No personal data found in category: ${category}${tags ? ` with tags: ${tags.join(', ')}` : ''}`
+              text: `No personal data found${filterInfo}`
             }]
           };
         }
@@ -276,7 +345,7 @@ function createMcpServer(): McpServer {
         return {
           content: [{
             type: "text",
-            text: `Found ${results.length} items in category '${category}'${tags ? ` with tags [${tags.join(', ')}]` : ''}:\n\n${resultText}`
+            text: `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${resultText}`
           }]
         };
       } catch (error) {
@@ -302,7 +371,7 @@ function createMcpServer(): McpServer {
         category: z.enum(['contacts', 'documents', 'preferences', 'basic_information', 'books', 'favorite_authors', 'interests', 'digital_products']).describe("Category of personal data to store"),
         title: z.string().describe("Record title"),
         content: z.record(z.any()).describe("Record content"),
-        tags: z.array(z.string()).optional().describe("Tags for categorization"),
+        tags: z.array(z.string()).optional().describe("Tags for categorization (use singular forms: 'family', 'work', 'personal', etc.)"),
         classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
       }
     },
@@ -450,6 +519,154 @@ function createMcpServer(): McpServer {
   return server;
 }
 
+function createChatGptMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "chatgpt-mcp-server",
+    version: "1.0.0"
+  });
+
+  // Register the search tool for ChatGPT
+  server.registerTool(
+    "search",
+    {
+      title: "Search",
+      description: "Search through personal data by matching against title, tags, and categories only (not content).\n\nCATEGORY DEFINITIONS & SEARCH GUIDANCE:\n- books: Use for queries about reading, literature, novels, fiction, non-fiction, textbooks, book reviews, or any book-related content. Keywords: books, reading, literature, novels, authors\n- contacts: Use for queries about people, friends, family, colleagues, relationships, networking, or contact information. Keywords: contacts, friends, family, colleagues, people, relationships\n- documents: Use for queries about files, papers, records, notes, reports, or written materials. Keywords: documents, files, papers, records, notes\n- basic_information: Use for queries about personal details, profile info, contact details, or general personal data. Keywords: personal info, profile, name, email, phone, address\n- digital_products: Use for queries about software, apps, tools, services, platforms, subscriptions, or technology. Keywords: software, apps, tools, services, applications, programs\n- preferences: Use for queries about settings, choices, options, configurations, or user preferences. Keywords: preferences, settings, configuration, options, choices\n- interests: Use for queries about hobbies, activities, likes, passions, or personal interests. Keywords: interests, hobbies, likes, activities, passions\n- favorite_authors: Use for queries about writers, novelists, poets, or literary authors. Keywords: authors, writers, novelists, poets\n\nSEARCH STRATEGY: If searching for specific items returns no results, try broader category terms. Always consider which category would contain the type of information being requested.",
+      inputSchema: {
+        query: z.string().describe("Search query to find relevant documents")
+      }
+    },
+    async ({ query }) => {
+      try {
+        const { data: results, error } = await supabase.rpc('chatgpt_search_data', {
+          p_query: query,
+          p_user_id: null, // Search across all users for ChatGPT
+          p_limit: 10
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: `Database error: ${error.message}`
+              })
+            }]
+          };
+        }
+
+        if (!results || results.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                results: []
+              })
+            }]
+          };
+        }
+
+        // Format results according to ChatGPT specification
+        const formattedResults = results.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          url: item.url
+        }));
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              results: formattedResults,
+              search_info: "Searched in: title, tags, and categories (not content)"
+            })
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: `Error searching data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            })
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Register the fetch tool for ChatGPT
+  server.registerTool(
+    "fetch",
+    {
+      title: "Fetch",
+      description: "Retrieve complete document content by ID including full text, metadata, and all associated information",
+      inputSchema: {
+        id: z.string().describe("Document ID to fetch")
+      }
+    },
+    async ({ id }) => {
+      try {
+        const { data: results, error } = await supabase.rpc('chatgpt_fetch_data', {
+          p_document_id: id
+        });
+
+        if (error) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: `Database error: ${error.message}`
+              })
+            }]
+          };
+        }
+
+        if (!results || results.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: `Document not found: ${id}`
+              })
+            }]
+          };
+        }
+
+        const doc = results[0];
+        
+        // Format result according to ChatGPT specification
+        const formattedResult = {
+          id: doc.id,
+          title: doc.title,
+          text: doc.text,
+          url: doc.url,
+          metadata: doc.metadata
+        };
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(formattedResult)
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: `Error fetching document: ${error instanceof Error ? error.message : 'Unknown error'}`
+            })
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  return server;
+}
+
 async function main() {
   // Initialize database connection
   await initializeDatabase();
@@ -476,6 +693,9 @@ async function main() {
 
   // Map to store transports by session ID
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+  
+  // Separate transport map for ChatGPT endpoint
+  const chatgptTransports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
   // Handle POST requests for client-to-server communication
   app.post('/mcp', async (req: express.Request, res: express.Response) => {
@@ -547,6 +767,77 @@ async function main() {
     await transport.handleRequest(req, res);
   });
 
+  // ChatGPT-specific endpoint routes
+  // Handle POST requests for ChatGPT client-to-server communication
+  app.post('/chatgpt_mcp', async (req: express.Request, res: express.Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    let transport: StreamableHTTPServerTransport;
+
+    if (sessionId && chatgptTransports[sessionId]) {
+      // Reuse existing transport
+      transport = chatgptTransports[sessionId];
+    } else if (!sessionId && isInitializeRequest(req.body)) {
+      // New initialization request
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sessionId) => {
+          chatgptTransports[sessionId] = transport;
+          console.log(`New ChatGPT session initialized: ${sessionId}`);
+        },
+        enableDnsRebindingProtection: false,
+      });
+
+      // Clean up transport when closed
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          console.log(`ChatGPT session closed: ${transport.sessionId}`);
+          delete chatgptTransports[transport.sessionId];
+        }
+      };
+
+      const server = createChatGptMcpServer();
+      await server.connect(transport);
+    } else {
+      // Invalid request
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: No valid session ID provided',
+        },
+        id: null,
+      });
+      return;
+    }
+
+    // Handle the request
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  // Handle GET requests for ChatGPT server-to-client notifications via SSE
+  app.get('/chatgpt_mcp', async (req: express.Request, res: express.Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId || !chatgptTransports[sessionId]) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+    
+    const transport = chatgptTransports[sessionId];
+    await transport.handleRequest(req, res);
+  });
+
+  // Handle DELETE requests for ChatGPT session termination
+  app.delete('/chatgpt_mcp', async (req: express.Request, res: express.Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId || !chatgptTransports[sessionId]) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+    
+    const transport = chatgptTransports[sessionId];
+    await transport.handleRequest(req, res);
+  });
+
   const PORT = process.env.PORT || 3000;
   const HOST = '0.0.0.0'; // Bind to all interfaces for Render
   
@@ -558,11 +849,19 @@ async function main() {
       console.log(`🔗 Server is ready to accept connections`);
     } else {
       console.log(`🌐 Available endpoints:`);
-      console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp`);
+      console.log(`- POST/GET/DELETE http://localhost:${PORT}/mcp (Full MCP server)`);
+      console.log(`- POST/GET/DELETE http://localhost:${PORT}/chatgpt_mcp (ChatGPT connector)`);
       console.log(`\nResources:`);
       console.log(`- data://categories - List available personal data categories`);
-      console.log(`\n🔍 Tools:`);
+      console.log(`\n🔍 Main Tools:`);
       console.log(`- search-personal-data - Search through personal data by title and content`);
+      console.log(`- extract-personal-data - Extract data by category with optional tag filtering`);
+      console.log(`- create-personal-data - Create new personal data records`);
+      console.log(`- update-personal-data - Update existing records`);
+      console.log(`- delete-personal-data - Delete records`);
+      console.log(`\n🤖 ChatGPT Tools:`);
+      console.log(`- search - Search for documents (ChatGPT format)`);
+      console.log(`- fetch - Fetch complete document content (ChatGPT format)`);
       console.log(`\n💡 Make sure to configure your .env file with database credentials!`);
     }
   });

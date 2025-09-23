@@ -201,7 +201,7 @@ class StdioMcpBridge {
         inputSchema: {
           tags: z.array(z.string()).min(1).describe("Category tags to find groups of entries"),
           userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
-          categories: z.array(z.enum(["contacts", "basic_information", "digital_products", "preferences", "interests", "favorite_authors", "books", "documents"])).optional().describe("Optional: Categories to filter by"),
+          categories: z.array(z.string()).optional().describe("Optional: Categories to filter by (dynamically loaded from database)"),
           limit: z.number().min(1).max(100).default(50).optional().describe("Maximum number of records"),
           offset: z.number().min(0).default(0).optional().describe("Pagination offset")
         }
