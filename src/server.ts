@@ -222,21 +222,11 @@ function createMcpServer(): McpServer {
    Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
         }).join('\n\n');
 
-        const resourceLinks = results.map((item: PersonalDataRecord) => ({
-          type: "resource_link" as const,
-          uri: `data://item/${item.id}`,
-          name: item.title,
-          description: `${item.category} - ${item.classification}`
-        }));
-
         return {
-          content: [
-            {
-              type: "text",
-              text: `Found ${results.length} items matching "${query}":\n\n${resultText}`
-            },
-            ...resourceLinks
-          ]
+          content: [{
+            type: "text",
+            text: `Found ${results.length} items matching "${query}":\n\n${resultText}`
+          }]
         };
       } catch (error) {
         return {

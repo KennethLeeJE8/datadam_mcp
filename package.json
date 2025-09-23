@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "inspector": "mcp-inspector",
+    "inspector": "npx @modelcontextprotocol/inspector --transport http --server-url http://localhost:3000/mcp",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

@@ -54,7 +54,7 @@ class StdioMcpBridge {
     // Create the MCP server that will handle stdio communication
     this.mcpServer = new McpServer({
       name: "datadam-mcp-bridge",
-      version: "2.0.0"
+      version: "1.0.0"
     }, {
       capabilities: {
         tools: { listChanged: true },
@@ -63,7 +63,64 @@ class StdioMcpBridge {
       }
     });
 
+    // Store available categories for dynamic validation
+    this.availableCategories = [];
+
     this.setupMcpServer();
+  }
+
+  async fetchAvailableCategories() {
+    try {
+      this.log('Fetching available categories from server...');
+      
+      // First establish a session if we don't have one
+      if (!this.sessionId) {
+        await this.makeMCPRequest('initialize', {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: {
+            name: 'datadam-mcp-bridge',
+            version: '1.0.0'
+          }
+        });
+      }
+      
+      // Try to read the categories resource
+      const resourceResponse = await this.makeMCPRequest('resources/read', { 
+        uri: 'data://categories' 
+      });
+      
+      if (resourceResponse.result && resourceResponse.result.contents) {
+        const content = resourceResponse.result.contents[0];
+        if (content && content.text) {
+          // Parse categories from the text content
+          const categoryMatches = content.text.match(/Category: (\w+)/g);
+          if (categoryMatches) {
+            this.availableCategories = categoryMatches.map(match => 
+              match.replace('Category: ', '')
+            );
+            this.log('Fetched categories', { categories: this.availableCategories });
+            return this.availableCategories;
+          }
+        }
+      }
+      
+      // Fallback to default categories if fetch fails
+      this.availableCategories = [
+        'contacts', 'documents', 'preferences', 'basic_information', 
+        'books', 'favorite_authors', 'interests', 'digital_products'
+      ];
+      this.log('Using fallback categories', { categories: this.availableCategories });
+      return this.availableCategories;
+    } catch (error) {
+      this.log('Failed to fetch categories', { error: error.message });
+      // Use fallback categories
+      this.availableCategories = [
+        'contacts', 'documents', 'preferences', 'basic_information', 
+        'books', 'favorite_authors', 'interests', 'digital_products'
+      ];
+      return this.availableCategories;
+    }
   }
 
   log(message, data = {}) {
@@ -155,9 +212,12 @@ class StdioMcpBridge {
         capabilities: {},
         clientInfo: {
           name: 'datadam-mcp-bridge',
-          version: '2.0.0'
+          version: '1.0.0'
         }
       });
+      
+      // Fetch available categories for validation
+      await this.fetchAvailableCategories();
       
       this.log('Session established, fetching tools from MCP server...');
       const toolsResponse = await this.makeMCPRequest('tools/list', {});
@@ -179,11 +239,11 @@ class StdioMcpBridge {
       'search-personal-data',
       {
         title: 'Search Personal Data',
-        description: 'Search through personal data by title and content for a specific user',
+        description: 'Search through personal data by title and content for a specific user. IMPORTANT: This tool should be triggered when users mention \'my\' followed by any category name (e.g., \'my books\', \'my contacts\', \'my preferences\', \'my documents\', \'my favorite authors\', etc.) as this indicates they want a personalized response based on their stored data. Also trigger for queries about personal information, preferences, or any stored user data.',
         inputSchema: {
-          query: z.string().describe("Search query to find in titles and content"),
+          query: z.string().describe("Search query to find in titles and content. For \'my {category}\' queries, extract the relevant search term or use the category name itself"),
           userId: z.string().describe("User ID (UUID) to search data for"),
-          categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts')"),
+          categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., \'books\', \'contacts\'). When user says \'my {category}\', include that category here"),
           classification: z.enum(["public", "personal", "sensitive", "confidential"]).optional().describe("Filter by classification level"),
           limit: z.number().min(1).max(100).default(20).optional().describe("Maximum number of results to return")
         }
@@ -196,10 +256,11 @@ class StdioMcpBridge {
     this.mcpServer.registerTool(
       'extract-personal-data',
       {
-        title: 'Extract Personal Data by Tags',
-        description: 'Extract groups of similar entries by tags from a specific user profile or all profiles',
+        title: 'Extract Personal Data by Category',
+        description: 'Extract groups of similar entries by category from a specific user profile or all profiles. TRIGGER: Use this tool when users ask for \'my {category}\' (e.g., \'my books\', \'my contacts\') to retrieve all items in that category. A single category is mandatory for broad collection retrieval. Tags are optional and used for further filtering within the category (e.g., [\'family\', \'work\'] for contacts, [\'sci-fi\', \'fantasy\'] for books). This complements the search tool for category-specific retrieval.',
         inputSchema: {
-          tags: z.array(z.string()).min(1).describe("Category tags to find groups of entries"),
+          category: z.string().describe("Category to filter by. Available categories are loaded dynamically from database"),
+          tags: z.array(z.string()).optional().describe("Optional: Multiple tags to filter entries within the category. Tags are used for further filtering (e.g., [\'family\', \'work\'] for contacts, [\'sci-fi\', \'fantasy\'] for books). Use singular forms for tags."),
           userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
           categories: z.array(z.string()).optional().describe("Optional: Categories to filter by (dynamically loaded from database)"),
           limit: z.number().min(1).max(100).default(50).optional().describe("Maximum number of records"),
@@ -215,13 +276,13 @@ class StdioMcpBridge {
       'create-personal-data',
       {
         title: 'Create Personal Data',
-        description: 'Automatically capture and store ANY personal data mentioned in conversations',
+        description: 'Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.',
         inputSchema: {
           userId: z.string().describe("User identifier"),
           category: z.enum(["contacts", "documents", "preferences", "basic_information", "books", "favorite_authors", "interests", "digital_products"]).describe("Category of personal data to store"),
           title: z.string().describe("Record title"),
           content: z.record(z.any()).describe("Record content"),
-          tags: z.array(z.string()).optional().describe("Tags for categorization"),
+          tags: z.array(z.string()).optional().describe("Tags for categorization (use singular forms: \'family\', \'work\', \'personal\', etc.)"),
           classification: z.enum(["public", "personal", "sensitive", "confidential"]).default("personal").optional().describe("Data classification level")
         }
       },
@@ -234,11 +295,11 @@ class StdioMcpBridge {
       'update-personal-data',
       {
         title: 'Update Personal Data',
-        description: 'Automatically update existing personal data records when new or updated information is mentioned',
+        description: 'Automatically update existing personal data records when new or updated information is mentioned. Requires the UUID of the specific data record to identify which item to update. This tool should be called whenever the user provides ANY updated information about previously stored data.',
         inputSchema: {
-          recordId: z.string().describe("Record identifier to update"),
+          recordId: z.string().describe("Record identifier (UUID) to update"),
           updates: z.record(z.any()).describe("Fields to update"),
-          conversationContext: z.string().optional().describe("The conversation context from which to extract updates")
+          conversationContext: z.string().optional().describe("The conversation context from which to extract updates (for passive mode)")
         }
       },
       async (args) => {
@@ -250,9 +311,9 @@ class StdioMcpBridge {
       'delete-personal-data',
       {
         title: 'Delete Personal Data',
-        description: 'Delete personal data records. Use with caution - supports both soft and hard deletion for GDPR compliance',
+        description: 'Delete personal data records. Requires the UUID(s) of the specific data record(s) to identify which items to delete. Use with caution - supports both soft and hard deletion for GDPR compliance.',
         inputSchema: {
-          recordIds: z.array(z.string()).min(1).describe("Record identifiers to delete"),
+          recordIds: z.array(z.string()).min(1).describe("Record identifiers (UUIDs) to delete"),
           hardDelete: z.boolean().default(false).optional().describe("Permanent deletion for GDPR compliance")
         }
       },
@@ -271,7 +332,7 @@ class StdioMcpBridge {
       "data://categories",
       {
         title: "Data Categories",
-        description: "List of available personal data categories",
+        description: "List of available personal data categories with item counts",
         mimeType: "text/plain"
       },
       async (uri) => {
@@ -284,7 +345,7 @@ class StdioMcpBridge {
               capabilities: {},
               clientInfo: {
                 name: 'datadam-mcp-bridge',
-                version: '2.0.0'
+                version: '1.0.0'
               }
             });
           }
@@ -300,7 +361,7 @@ class StdioMcpBridge {
               contents: [{
                 uri: uri.href,
                 mimeType: 'text/plain',
-                text: 'Resource temporarily unavailable'
+                text: 'No data categories found. Add some personal data to see categories here.'
               }]
             };
           }
@@ -310,7 +371,7 @@ class StdioMcpBridge {
             contents: [{
               uri: uri.href,
               mimeType: 'text/plain',
-              text: `Resource read failed: ${error.message}`
+              text: `Database connection error: ${error instanceof Error ? error.message : 'Unknown error'}`
             }]
           };
         }
@@ -332,9 +393,43 @@ class StdioMcpBridge {
           capabilities: {},
           clientInfo: {
             name: 'datadam-mcp-bridge',
-            version: '2.0.0'
+            version: '1.0.0'
           }
         });
+        
+        // Fetch categories after establishing session
+        await this.fetchAvailableCategories();
+      }
+      
+      // Handle "my {category}" pattern detection for search-personal-data
+      if (toolName === 'search-personal-data' && args.query) {
+        const cleanQuery = args.query.replace(/^["']|["']$/g, '').trim();
+        const myPattern = /\bmy\s+(\w+)/gi;
+        const matches = cleanQuery.match(myPattern);
+        
+        if (matches && (!args.categories || args.categories.length === 0)) {
+          // Extract potential category from "my X" pattern
+          const potentialCategory = matches[0].replace(/\bmy\s+/i, '').toLowerCase();
+          
+          // Check if it matches any available categories
+          if (this.availableCategories.includes(potentialCategory)) {
+            args.categories = [potentialCategory];
+            this.log(`Auto-detected category from "my ${potentialCategory}" pattern`);
+          }
+        }
+      }
+      
+      // Validate category for extract-personal-data
+      if (toolName === 'extract-personal-data' && args.category) {
+        if (this.availableCategories.length > 0 && !this.availableCategories.includes(args.category)) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Invalid category "${args.category}". Available categories: ${this.availableCategories.join(', ')}`
+            }],
+            isError: true
+          };
+        }
       }
       
       // Use the MCP tools/call method
