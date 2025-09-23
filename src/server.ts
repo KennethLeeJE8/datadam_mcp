@@ -368,28 +368,15 @@ function createMcpServer(): McpServer {
       description: "Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.",
       inputSchema: {
         userId: z.string().describe("User identifier"),
-        dataType: z.enum(['contact', 'document', 'preference', 'custom', 'book', 'author', 'interest', 'software']).describe("Type of data - will be auto-mapped to appropriate category"),
+        category: z.enum(['contacts', 'documents', 'preferences', 'basic_information', 'books', 'favorite_authors', 'interests', 'digital_products']).describe("Category of personal data to store"),
         title: z.string().describe("Record title"),
         content: z.record(z.any()).describe("Record content"),
         tags: z.array(z.string()).optional().describe("Tags for categorization (use singular forms: 'family', 'work', 'personal', etc.)"),
         classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
       }
     },
-    async ({ userId, dataType, title, content, tags, classification = 'personal' }) => {
+    async ({ userId, category, title, content, tags, classification = 'personal' }) => {
       try {
-        // Map data_type to category
-        const categoryMapping: Record<string, string> = {
-          'contact': 'contacts',
-          'document': 'documents',
-          'preference': 'preferences', 
-          'custom': 'basic_information',
-          'book': 'books',
-          'author': 'favorite_authors',
-          'interest': 'interests',
-          'software': 'digital_products'
-        };
-
-        const category = categoryMapping[dataType] || 'basic_information';
 
         const { data: result, error } = await supabase.rpc('create_personal_data', {
           p_user_id: userId,

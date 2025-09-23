@@ -218,7 +218,7 @@ class StdioMcpBridge {
         description: 'Automatically capture and store ANY personal data mentioned in conversations',
         inputSchema: {
           userId: z.string().describe("User identifier"),
-          dataType: z.enum(["contact", "document", "preference", "custom", "book", "author", "interest", "software"]).describe("Type of data - will be auto-mapped to appropriate category"),
+          category: z.enum(["contacts", "documents", "preferences", "basic_information", "books", "favorite_authors", "interests", "digital_products"]).describe("Category of personal data to store"),
           title: z.string().describe("Record title"),
           content: z.record(z.any()).describe("Record content"),
           tags: z.array(z.string()).optional().describe("Tags for categorization"),
