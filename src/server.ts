@@ -35,6 +35,21 @@ interface Category {
 }
 
 let supabase: SupabaseClient;
+let availableCategories: string[] = [];
+
+async function fetchAvailableCategories(): Promise<string[]> {
+  try {
+    const { data: categories, error } = await supabase.rpc('get_active_categories');
+    if (error) {
+      console.error("Error fetching categories:", error);
+      return [];
+    }
+    return categories?.map((cat: Category) => cat.category_name) || [];
+  } catch (error) {
+    console.error("Failed to fetch categories:", error);
+    return [];
+  }
+}
 
 async function initializeDatabase(): Promise<void> {
   try {
@@ -46,6 +61,10 @@ async function initializeDatabase(): Promise<void> {
     }
 
     supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Fetch initial categories
+    availableCategories = await fetchAvailableCategories();
+    console.log("Available categories:", availableCategories);
     
     // Test the connection by fetching category stats
     const { data, error } = await supabase.rpc('get_category_stats');
@@ -219,13 +238,27 @@ function createMcpServer(): McpServer {
   // Register the extract personal data tool
   // NOTE: Categories should be plural where grammatically appropriate (contacts, books, documents)
   // Tags should always use singular forms (family, work, sci-fi, personal)
+  
+  // Create category schema dynamically
+  const getCategorySchema = () => {
+    if (availableCategories.length > 0) {
+      // Use enum when categories are available for better UI experience
+      return z.enum(availableCategories as [string, ...string[]]).describe(
+        `Select a category to filter by. Available categories: ${availableCategories.join(', ')}`
+      );
+    } else {
+      // Fallback to string when categories aren't loaded yet
+      return z.string().describe("Category to filter by (categories are loaded dynamically from database)");
+    }
+  };
+  
   server.registerTool(
     "extract-personal-data",
     {
       title: "Extract Personal Data by Category",
       description: "Extract groups of similar entries by category from a specific user profile or all profiles. A single category is mandatory for broad collection retrieval (e.g., 'books' for all books, 'contacts' for all contacts). Tags are optional and used for further filtering within the category (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books), similar to the search tool implementation.",
       inputSchema: {
-        category: z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents']).describe("Single category to filter by"),
+        category: getCategorySchema(),
         tags: z.array(z.string()).optional().describe("Optional: Multiple tags to filter entries within the category. Tags are used for further filtering (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). Use singular forms for tags."),
         userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
         filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
@@ -235,6 +268,22 @@ function createMcpServer(): McpServer {
     },
     async ({ category, tags, userId, filters, limit = 50, offset = 0 }) => {
       try {
+        // Refresh categories before processing
+        const latestCategories = await fetchAvailableCategories();
+        if (latestCategories.length > 0) {
+          availableCategories = latestCategories;
+        }
+        
+        // Validate category against latest list
+        if (availableCategories.length > 0 && !availableCategories.includes(category)) {
+          return {
+            content: [{
+              type: "text",
+              text: `Invalid category "${category}". Available categories: ${availableCategories.join(', ')}`
+            }],
+            isError: true
+          };
+        }
         const { data: results, error } = await supabase.rpc('extract_personal_data', {
           p_category: category,
           p_tags: (tags && tags.length > 0) ? tags : null,
