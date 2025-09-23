@@ -222,23 +222,23 @@ function createMcpServer(): McpServer {
   server.registerTool(
     "extract-personal-data",
     {
-      title: "Extract Personal Data by Tags",
-      description: "Extract groups of similar entries by tags from a specific user profile or all profiles. Use categories for broad collection retrieval (e.g., all books, all contacts) and tags for specific filtering (e.g., 'family' contacts, 'sci-fi' books). Combine both for precise results or use either one independently based on the user's request.",
+      title: "Extract Personal Data by Category",
+      description: "Extract groups of similar entries by category from a specific user profile or all profiles. A single category is mandatory for broad collection retrieval (e.g., 'books' for all books, 'contacts' for all contacts). Tags are optional and used for further filtering within the category (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books), similar to the search tool implementation.",
       inputSchema: {
-        tags: z.array(z.string()).min(1).describe("Tags for specific filtering within or across categories (e.g., ['family'], ['work'], ['sci-fi']). Use singular forms for tags. Use alone for targeted extraction or combine with categories for precise filtering"),
-        userId: z.string().optional().describe("Optional: Specify which user profile to extract from. If omitted, searches all profiles."),
-        categories: z.array(z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents'])).optional().describe("Optional: Use for broad collection retrieval (e.g., 'books' for all books, 'contacts' for all contacts). Can be combined with tags for refined filtering or used alone for category-wide extraction"),
+        category: z.enum(['contacts', 'basic_information', 'digital_products', 'preferences', 'interests', 'favorite_authors', 'books', 'documents']).describe("Single category to filter by"),
+        tags: z.array(z.string()).optional().describe("Optional: Multiple tags to filter entries within the category. Tags are used for further filtering (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). Use singular forms for tags."),
+        userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
         filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
         limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
         offset: z.number().min(0).default(0).describe("Pagination offset")
       }
     },
-    async ({ tags, userId, categories, filters, limit = 50, offset = 0 }) => {
+    async ({ category, tags, userId, filters, limit = 50, offset = 0 }) => {
       try {
         const { data: results, error } = await supabase.rpc('extract_personal_data', {
-          p_tags: tags,
+          p_category: category,
+          p_tags: (tags && tags.length > 0) ? tags : null,
           p_user_id: userId || null,
-          p_categories: (categories && categories.length > 0) ? categories : null,
           p_filters: filters || null,
           p_limit: limit,
           p_offset: offset
@@ -254,10 +254,13 @@ function createMcpServer(): McpServer {
         }
 
         if (!results || results.length === 0) {
+          const filterInfo = tags && tags.length > 0 
+            ? ` in category: ${category} with tags: ${tags.join(', ')}`
+            : ` in category: ${category}`;
           return {
             content: [{
               type: "text",
-              text: `No personal data found with tags: ${tags.join(', ')}`
+              text: `No personal data found${filterInfo}`
             }]
           };
         }
@@ -801,7 +804,7 @@ async function main() {
       console.log(`- data://categories - List available personal data categories`);
       console.log(`\n🔍 Main Tools:`);
       console.log(`- search-personal-data - Search through personal data by title and content`);
-      console.log(`- extract-personal-data - Extract data by tags`);
+      console.log(`- extract-personal-data - Extract data by category with optional tag filtering`);
       console.log(`- create-personal-data - Create new personal data records`);
       console.log(`- update-personal-data - Update existing records`);
       console.log(`- delete-personal-data - Delete records`);

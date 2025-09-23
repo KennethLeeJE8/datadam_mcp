@@ -3,7 +3,7 @@
 
 -- Drop existing functions first
 DROP FUNCTION IF EXISTS search_personal_data(UUID, TEXT, TEXT[], TEXT[], TEXT, INTEGER, INTEGER) CASCADE;
-DROP FUNCTION IF EXISTS extract_personal_data(TEXT[], UUID, TEXT[], JSONB, INTEGER, INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS extract_personal_data(TEXT, TEXT[], UUID, JSONB, INTEGER, INTEGER) CASCADE;
 DROP FUNCTION IF EXISTS create_personal_data(UUID, TEXT, TEXT, JSONB, TEXT[], TEXT) CASCADE;
 DROP FUNCTION IF EXISTS update_personal_data(UUID, JSONB, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS delete_personal_data(UUID[], BOOLEAN) CASCADE;
@@ -62,11 +62,11 @@ BEGIN
 END;
 $$;
 
--- Function to extract personal data by tags
+-- Function to extract personal data by category with optional tags
 CREATE OR REPLACE FUNCTION extract_personal_data(
-  p_tags TEXT[],
+  p_category TEXT,
+  p_tags TEXT[] DEFAULT NULL,
   p_user_id UUID DEFAULT NULL,
-  p_categories TEXT[] DEFAULT NULL,
   p_filters JSONB DEFAULT NULL,
   p_limit INTEGER DEFAULT 50,
   p_offset INTEGER DEFAULT 0
@@ -101,8 +101,8 @@ BEGIN
   WHERE 
     pd.deleted_at IS NULL
     AND (p_user_id IS NULL OR pd.user_id = p_user_id)
-    AND pd.tags && p_tags
-    AND (p_categories IS NULL OR pd.category = ANY(p_categories))
+    AND pd.category = p_category
+    AND (p_tags IS NULL OR pd.tags && p_tags)
   ORDER BY pd.updated_at DESC
   LIMIT p_limit
   OFFSET p_offset;
@@ -313,14 +313,14 @@ $$;
 
 -- Grant permissions to service role
 GRANT EXECUTE ON FUNCTION search_personal_data(UUID, TEXT, TEXT[], TEXT[], TEXT, INTEGER, INTEGER) TO service_role;
-GRANT EXECUTE ON FUNCTION extract_personal_data(TEXT[], UUID, TEXT[], JSONB, INTEGER, INTEGER) TO service_role;
+GRANT EXECUTE ON FUNCTION extract_personal_data(TEXT, TEXT[], UUID, JSONB, INTEGER, INTEGER) TO service_role;
 GRANT EXECUTE ON FUNCTION create_personal_data(UUID, TEXT, TEXT, JSONB, TEXT[], TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION update_personal_data(UUID, JSONB, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION delete_personal_data(UUID[], BOOLEAN) TO service_role;
 
 -- Grant permissions to authenticated users
 GRANT EXECUTE ON FUNCTION search_personal_data(UUID, TEXT, TEXT[], TEXT[], TEXT, INTEGER, INTEGER) TO authenticated;
-GRANT EXECUTE ON FUNCTION extract_personal_data(TEXT[], UUID, TEXT[], JSONB, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION extract_personal_data(TEXT, TEXT[], UUID, JSONB, INTEGER, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION create_personal_data(UUID, TEXT, TEXT, JSONB, TEXT[], TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION update_personal_data(UUID, JSONB, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION delete_personal_data(UUID[], BOOLEAN) TO authenticated;
