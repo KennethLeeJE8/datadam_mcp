@@ -152,11 +152,11 @@ function createMcpServer(): McpServer {
     "search-personal-data",
     {
       title: "Search Personal Data",
-      description: "Search through personal data by title and content for a specific user",
+      description: "Search through personal data by title and content for a specific user. IMPORTANT: This tool should be triggered when users mention 'my' followed by any category name (e.g., 'my books', 'my contacts', 'my preferences', 'my documents', 'my favorite authors', etc.) as this indicates they want a personalized response based on their stored data. Also trigger for queries about personal information, preferences, or any stored user data.",
       inputSchema: {
-        query: z.string().describe("Search query to find in titles and content"),
+        query: z.string().describe("Search query to find in titles and content. For 'my {category}' queries, extract the relevant search term or use the category name itself"),
         userId: z.string().describe("User ID (UUID) to search data for"),
-        categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts')"),
+        categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts'). When user says 'my {category}', include that category here"),
         classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Filter by classification level"),
         limit: z.number().min(1).max(100).default(20).describe("Maximum number of results to return")
       }
@@ -165,6 +165,21 @@ function createMcpServer(): McpServer {
       try {
         // Remove surrounding quotes if present
         const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
+        
+        // Detect "my {category}" pattern and auto-categorize if not already specified
+        const myPattern = /\bmy\s+(\w+)/gi;
+        const matches = cleanQuery.match(myPattern);
+        
+        if (matches && (!categories || categories.length === 0)) {
+          // Extract potential category from "my X" pattern
+          const potentialCategory = matches[0].replace(/\bmy\s+/i, '').toLowerCase();
+          
+          // Check if it matches any available categories
+          if (availableCategories.includes(potentialCategory)) {
+            categories = [potentialCategory];
+            console.log(`Auto-detected category from "my ${potentialCategory}" pattern`);
+          }
+        }
 
         const { data: results, error } = await supabase.rpc('search_personal_data', {
           p_user_id: userId,
@@ -256,7 +271,7 @@ function createMcpServer(): McpServer {
     "extract-personal-data",
     {
       title: "Extract Personal Data by Category",
-      description: "Extract groups of similar entries by category from a specific user profile or all profiles. A single category is mandatory for broad collection retrieval (e.g., 'books' for all books, 'contacts' for all contacts). Tags are optional and used for further filtering within the category (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books), similar to the search tool implementation.",
+      description: "Extract groups of similar entries by category from a specific user profile or all profiles. TRIGGER: Use this tool when users ask for 'my {category}' (e.g., 'my books', 'my contacts') to retrieve all items in that category. A single category is mandatory for broad collection retrieval. Tags are optional and used for further filtering within the category (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). This complements the search tool for category-specific retrieval.",
       inputSchema: {
         category: getCategorySchema(),
         tags: z.array(z.string()).optional().describe("Optional: Multiple tags to filter entries within the category. Tags are used for further filtering (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). Use singular forms for tags."),
