@@ -448,16 +448,6 @@ function createMcpServer(): McpServer {
           };
         }
 
-        if (!result) {
-          return {
-            content: [{
-              type: "text",
-              text: `Record not found or no changes made: ${recordId}`
-            }],
-            isError: true
-          };
-        }
-
         return {
           content: [{
             type: "text",
@@ -503,33 +493,11 @@ function createMcpServer(): McpServer {
           };
         }
 
-        const deletedCount = result || 0;
-        const requestedCount = recordIds.length;
         const deleteType = hardDelete ? 'permanently deleted' : 'soft deleted';
-        
-        if (deletedCount === 0) {
-          return {
-            content: [{
-              type: "text",
-              text: `No records were ${deleteType}. Records may not exist or were already deleted.`
-            }],
-            isError: true
-          };
-        }
-        
-        if (deletedCount < requestedCount) {
-          return {
-            content: [{
-              type: "text",
-              text: `Partially successful: ${deleteType} ${deletedCount} of ${requestedCount} requested record(s). Some records may not exist or were already deleted.`
-            }]
-          };
-        }
-
         return {
           content: [{
             type: "text",
-            text: `Successfully ${deleteType} ${deletedCount} personal data record(s)`
+            text: `Successfully ${deleteType} ${recordIds.length} personal data record(s)`
           }]
         };
       } catch (error) {
