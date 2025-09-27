@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "inspector": "npx @modelcontextprotocol/inspector --transport http --server-url http://localhost:3000/mcp",
+    "generate:mcp-token": "node scripts/generate-mcp-token.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
