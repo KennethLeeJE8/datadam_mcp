@@ -574,7 +574,27 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  result_count INTEGER;
 BEGIN
+  -- Log the search operation
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    p_user_id, 'READ', 'personal_data', NULL,
+    jsonb_build_object(
+      'operation_type', 'search',
+      'search_text', p_search_text,
+      'categories', p_categories,
+      'tags', p_tags,
+      'classification', p_classification,
+      'limit', p_limit,
+      'offset', p_offset
+    ),
+    inet_client_addr(), 'search_personal_data_function'
+  );
+
   RETURN QUERY
   SELECT 
     pd.id,
@@ -628,6 +648,23 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
+  -- Log the extract operation
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    p_user_id, 'READ', 'personal_data', NULL,
+    jsonb_build_object(
+      'operation_type', 'extract',
+      'category', p_category,
+      'tags', p_tags,
+      'filters', p_filters,
+      'limit', p_limit,
+      'offset', p_offset
+    ),
+    inet_client_addr(), 'extract_personal_data_function'
+  );
+
   RETURN QUERY
   SELECT 
     pd.id,
@@ -816,7 +853,7 @@ BEGIN
   LOOP
     -- Get the current record for logging
     SELECT * INTO old_record FROM personal_data 
-    WHERE id = record_id AND (p_hard_delete OR deleted_at IS NULL);
+    WHERE id = record_id AND (p_hard_delete = TRUE OR deleted_at IS NULL);
 
     IF FOUND THEN
       IF p_hard_delete THEN
@@ -835,10 +872,11 @@ BEGIN
         changes, ip_address, user_agent
       ) VALUES (
         old_record.user_id, 
-        CASE WHEN p_hard_delete THEN 'HARD_DELETE' ELSE 'SOFT_DELETE' END,
+        'DELETE',
         'personal_data', 
         record_id,
         jsonb_build_object(
+          'delete_type', CASE WHEN p_hard_delete THEN 'hard' ELSE 'soft' END,
           'hard_delete', p_hard_delete,
           'deleted_record', row_to_json(old_record)
         ),
