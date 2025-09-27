@@ -39,12 +39,8 @@ class StdioMcpBridge {
     this.sessionId = null;
     this.requestIdCounter = 1;
     
-    // Get API key from environment and ensure it exists
-    const apiKey = process.env.MCP_API_KEY;
-    if (!apiKey) {
-      throw new Error('Missing MCP_API_KEY environment variable. Set MCP_API_KEY to authenticate with the MCP server.');
-    }
-    this.apiKey = apiKey;
+    // Get API key from environment if available
+    this.apiKey = process.env.MCP_API_KEY;
     
     // Enable verbose logging if DEBUG environment variable is set
     this.debug = process.env.DEBUG === 'true';

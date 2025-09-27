@@ -1,13 +1,7 @@
 // Simple test script to verify MCP server functionality
 const fetch = require('node:fetch');
-require('dotenv').config();
 
 const SERVER_URL = 'http://localhost:3000/mcp';
-const API_KEY = process.env.MCP_API_KEY;
-
-if (!API_KEY) {
-  throw new Error('Missing MCP_API_KEY environment variable for test harness authentication.');
-}
 
 async function testMcpServer() {
   console.log('🧪 Testing MCP Server...\n');
@@ -18,8 +12,7 @@ async function testMcpServer() {
     const initResponse = await fetch(SERVER_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -60,8 +53,7 @@ async function testMcpServer() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${API_KEY}`
+        'mcp-session-id': sessionId
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -79,8 +71,7 @@ async function testMcpServer() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${API_KEY}`
+        'mcp-session-id': sessionId
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -98,8 +89,7 @@ async function testMcpServer() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${API_KEY}`
+        'mcp-session-id': sessionId
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -123,8 +113,7 @@ async function testMcpServer() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'mcp-session-id': sessionId,
-        'Authorization': `Bearer ${API_KEY}`
+        'mcp-session-id': sessionId
       },
       body: JSON.stringify({
         jsonrpc: '2.0',

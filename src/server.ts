@@ -11,12 +11,6 @@ import * as dotenv from "dotenv";
 // Load environment variables
 dotenv.config();
 
-const requiredApiKey = process.env.MCP_API_KEY;
-
-if (!requiredApiKey) {
-  throw new Error("Missing MCP_API_KEY environment variable. Set MCP_API_KEY to enable API access.");
-}
-
 interface PersonalDataRecord {
   id: string;
   user_id: string;
@@ -673,37 +667,10 @@ async function main() {
   app.use(cors({
     origin: '*',
     exposedHeaders: ['Mcp-Session-Id'],
-    allowedHeaders: ['Content-Type', 'mcp-session-id', 'Authorization', 'authorization'],
+    allowedHeaders: ['Content-Type', 'mcp-session-id'],
   }));
   
   app.use(express.json());
-
-  const requireApiKey: express.RequestHandler = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const bearerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-      ? authHeader.slice('Bearer '.length).trim()
-      : null;
-
-    const headerToken = req.headers['x-api-key'];
-    const apiKeyCandidate = bearerToken || (typeof headerToken === 'string' ? headerToken.trim() : null);
-
-    if (!apiKeyCandidate || apiKeyCandidate !== requiredApiKey) {
-      res.status(401).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32001,
-          message: 'Unauthorized: Missing or invalid API key',
-        },
-        id: null,
-      });
-      return;
-    }
-
-    next();
-  };
-
-  app.use('/mcp', requireApiKey);
-  app.use('/chatgpt_mcp', requireApiKey);
 
   // Health check endpoint for Render
   app.get('/health', (req: express.Request, res: express.Response) => {

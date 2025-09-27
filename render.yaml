@@ -16,4 +16,3 @@ services:
     # - SUPABASE_URL
     # - SUPABASE_SERVICE_ROLE_KEY
     # - DATABASE_USER_ID
-    # - MCP_API_KEY

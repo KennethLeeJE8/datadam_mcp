@@ -31,26 +31,11 @@ A Model Context Protocol (MCP) server that provides secure access to your person
    - `SUPABASE_URL` - Your Supabase project URL
    - `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
    - `DATABASE_USER_ID` - Your user UUID from the auth.users table
-   - `MCP_API_KEY` - API key required to access the MCP endpoints (generate with `npm run generate:mcp-token`)
 
 4. Build the TypeScript code:
    ```bash
    npm run build
    ```
-
-### Generate an API Key
-
-Use the helper script to create a signed JWT that can be used as your MCP API key:
-
-```bash
-npm run generate:mcp-token
-```
-
-The command prints a token that should be added to both your server environment (`MCP_API_KEY`) and any MCP clients (for example, the stdio bridge or Inspector requests). The script also accepts optional flags:
-
-- `--secret <value>` – sign the JWT with a specific secret instead of a random one
-- `--subject <value>` – customise the token subject (defaults to `mcp-client`)
-- `--expires-in-days <number>` – token validity window (defaults to 30 days)
 
 ## Usage
 
@@ -138,8 +123,6 @@ The server exposes the following HTTP endpoints:
 - `POST /mcp` - Client-to-server communication
 - `GET /mcp` - Server-to-client notifications (SSE)
 - `DELETE /mcp` - Session termination
-
-All `/mcp` routes require an `Authorization: Bearer <MCP_API_KEY>` header (or `X-API-Key` header) that matches the API key configured on the server.
 
 
 ## Development
