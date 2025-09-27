@@ -1,3 +1,10 @@
+-- ============================================================================
+-- Combined SQL schema for Datadam MCP
+-- Source order: schema.sql → 002_mcp_functions.sql → 003_error_logging.sql → 004_category_registry.sql → 005_chatgpt_functions.sql
+-- ============================================================================
+
+-- >>> BEGIN schema.sql
+
 -- SUPABASE SETUP INSTRUCTIONS:
 -- 
 -- STEP 1: Create Test User in Supabase Dashboard
@@ -18,13 +25,7 @@
 --   ✅ Triggers and helper functions
 --   ✅ Sample data insertion (after UUID replacement)
 --
--- STEP 4: Optional Dashboard Configuration
---   - Authentication providers (if using OAuth)
---   - Email templates (if using email auth)
---   - Webhook URLs (if using webhooks)
---   - Storage buckets (if storing files)
---
--- STEP 5: Service Role Key
+-- STEP 4: Service Role Key
 --   Make sure your SUPABASE_SERVICE_ROLE_KEY environment variable
 --   is set correctly for admin operations
 
@@ -70,6 +71,102 @@ CREATE TABLE IF NOT EXISTS data_access_log (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Category registry system for dynamic data discovery
+CREATE TABLE IF NOT EXISTS category_registry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_name TEXT UNIQUE NOT NULL,
+  display_name TEXT NOT NULL,
+  description TEXT,
+  is_active BOOLEAN DEFAULT FALSE,
+  item_count INTEGER DEFAULT 0,
+  first_activation TIMESTAMPTZ,
+  last_modified TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Trigger words for AI agents to know when to query this category
+  trigger_words TEXT[] DEFAULT '{}',
+  
+  -- Contextual hints about when to query this category
+  query_hint TEXT,
+  
+  -- Example queries for this category
+  example_queries TEXT[] DEFAULT '{}',
+  
+  -- Minimum items required to activate category (usually 1)
+  min_items_for_activation INTEGER DEFAULT 1,
+  
+  -- JSON field for additional metadata
+  metadata JSONB DEFAULT '{}',
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add category column to personal_data table
+ALTER TABLE personal_data 
+ADD COLUMN IF NOT EXISTS category TEXT 
+REFERENCES category_registry(category_name);
+
+-- Error logging tables for comprehensive error tracking and monitoring
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Main error logs table
+CREATE TABLE IF NOT EXISTS error_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    level VARCHAR(20) NOT NULL CHECK (level IN ('debug', 'info', 'warn', 'error', 'critical')),
+    message TEXT NOT NULL,
+    category VARCHAR(50),
+    context JSONB,
+    error_details JSONB,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    hostname VARCHAR(255),
+    process_id INTEGER,
+    correlation_id VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Error alerts table for critical issues requiring immediate attention
+CREATE TABLE IF NOT EXISTS error_alerts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    level VARCHAR(20) NOT NULL DEFAULT 'error',
+    message TEXT NOT NULL,
+    context JSONB,
+    timestamp TIMESTAMPTZ NOT NULL,
+    correlation_id VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'acknowledged', 'resolved', 'suppressed')),
+    acknowledged_at TIMESTAMPTZ,
+    acknowledged_by VARCHAR(255),
+    resolved_at TIMESTAMPTZ,
+    resolved_by VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Error monitoring metrics table for tracking patterns and trends
+CREATE TABLE IF NOT EXISTS error_metrics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    metric_type VARCHAR(50) NOT NULL,
+    metric_name VARCHAR(100) NOT NULL,
+    metric_value DECIMAL,
+    labels JSONB,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Error recovery attempts table for tracking recovery strategies
+CREATE TABLE IF NOT EXISTS error_recovery_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    error_correlation_id VARCHAR(255) NOT NULL,
+    recovery_strategy VARCHAR(100) NOT NULL,
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    status VARCHAR(20) DEFAULT 'attempted' CHECK (status IN ('attempted', 'succeeded', 'failed', 'skipped')),
+    error_details JSONB,
+    recovery_context JSONB,
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    duration_ms INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
@@ -78,14 +175,37 @@ CREATE INDEX IF NOT EXISTS idx_personal_data_tags ON personal_data USING GIN(tag
 CREATE INDEX IF NOT EXISTS idx_personal_data_content ON personal_data USING GIN(content);
 CREATE INDEX IF NOT EXISTS idx_personal_data_classification ON personal_data(classification);
 CREATE INDEX IF NOT EXISTS idx_personal_data_deleted_at ON personal_data(deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_personal_data_category ON personal_data(category);
 CREATE INDEX IF NOT EXISTS idx_access_log_user_operation ON data_access_log(user_id, operation);
 CREATE INDEX IF NOT EXISTS idx_access_log_timestamp ON data_access_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_access_log_table_name ON data_access_log(table_name);
+CREATE INDEX IF NOT EXISTS idx_category_registry_active ON category_registry(is_active);
+CREATE INDEX IF NOT EXISTS idx_category_registry_name ON category_registry(category_name);
+CREATE INDEX IF NOT EXISTS idx_category_registry_modified ON category_registry(last_modified);
+CREATE INDEX IF NOT EXISTS idx_category_registry_trigger_words ON category_registry USING GIN(trigger_words);
+CREATE INDEX IF NOT EXISTS idx_error_logs_timestamp ON error_logs(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_error_logs_level ON error_logs(level);
+CREATE INDEX IF NOT EXISTS idx_error_logs_category ON error_logs(category);
+CREATE INDEX IF NOT EXISTS idx_error_logs_correlation_id ON error_logs(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_error_logs_context_user_id ON error_logs USING GIN ((context->>'userId') gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_error_alerts_status ON error_alerts(status);
+CREATE INDEX IF NOT EXISTS idx_error_alerts_timestamp ON error_alerts(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_error_alerts_level ON error_alerts(level);
+CREATE INDEX IF NOT EXISTS idx_error_metrics_type_name ON error_metrics(metric_type, metric_name);
+CREATE INDEX IF NOT EXISTS idx_error_metrics_timestamp ON error_metrics(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_error_recovery_correlation_id ON error_recovery_attempts(error_correlation_id);
+CREATE INDEX IF NOT EXISTS idx_error_recovery_strategy ON error_recovery_attempts(recovery_strategy);
+CREATE INDEX IF NOT EXISTS idx_error_recovery_status ON error_recovery_attempts(status);
 
 -- Row Level Security Policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE personal_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE data_access_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE category_registry ENABLE ROW LEVEL SECURITY;
+ALTER TABLE error_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE error_alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE error_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE error_recovery_attempts ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role to bypass RLS for admin operations
 CREATE POLICY "service_role_full_access_profiles" ON profiles
@@ -99,6 +219,31 @@ CREATE POLICY "service_role_full_access_personal_data" ON personal_data
   WITH CHECK (true);
 
 CREATE POLICY "service_role_full_access_audit_log" ON data_access_log
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "service_role_full_access_error_logs" ON error_logs
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "service_role_full_access_error_alerts" ON error_alerts
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "service_role_full_access_error_metrics" ON error_metrics
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "service_role_full_access_error_recovery_attempts" ON error_recovery_attempts
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "service_role_full_access_category_registry" ON category_registry
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
@@ -132,6 +277,11 @@ CREATE POLICY "users_can_insert_audit_logs" ON data_access_log
   FOR INSERT TO authenticated
   WITH CHECK (true);
 
+-- Category registry policies
+CREATE POLICY "users_can_read_categories" ON category_registry
+  FOR SELECT TO authenticated
+  USING (true);
+
 -- Create triggers for updating timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -154,80 +304,10 @@ CREATE TRIGGER update_personal_data_updated_at
 -- Drop old data_type function if it exists
 DROP FUNCTION IF EXISTS get_data_type_stats();
 
--- Create function to get category statistics (replaced data_type with categories)
-CREATE OR REPLACE FUNCTION get_category_distribution_stats()
-RETURNS TABLE (
-  classification TEXT,
-  record_count BIGINT,
-  avg_size NUMERIC
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    pd.classification,
-    COUNT(*) as record_count,
-    AVG(octet_length(pd.content::text)) as avg_size
-  FROM personal_data pd
-  WHERE pd.deleted_at IS NULL
-  GROUP BY pd.classification
-  ORDER BY record_count DESC;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Note: All functions have been moved to their appropriate sections after table creation
 
--- RPC function for searching personal data with filters
-CREATE OR REPLACE FUNCTION search_personal_data(
-  p_user_id UUID,
-  p_search_text TEXT DEFAULT NULL,
-  p_categories TEXT[] DEFAULT NULL,
-  p_tags TEXT[] DEFAULT NULL,
-  p_classification TEXT DEFAULT NULL,
-  p_limit INTEGER DEFAULT 50,
-  p_offset INTEGER DEFAULT 0
-)
-RETURNS TABLE (
-  id UUID,
-  user_id UUID,
-  title TEXT,
-  content JSONB,
-  tags TEXT[],
-  classification TEXT,
-  category TEXT,
-  created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ,
-  last_accessed TIMESTAMPTZ
-) AS $$
-BEGIN
-  -- Update last_accessed for audit purposes
-  UPDATE personal_data 
-  SET last_accessed = NOW() 
-  WHERE personal_data.user_id = p_user_id;
-
-  RETURN QUERY
-  SELECT 
-    pd.id,
-    pd.user_id,
-    pd.title,
-    pd.content,
-    pd.tags,
-    pd.classification,
-    pd.category,
-    pd.created_at,
-    pd.updated_at,
-    pd.last_accessed
-  FROM personal_data pd
-  WHERE pd.user_id = p_user_id
-    AND pd.deleted_at IS NULL
-    AND (p_search_text IS NULL OR 
-         pd.title ILIKE '%' || p_search_text || '%' OR 
-         pd.content::text ILIKE '%' || p_search_text || '%')
-    AND (p_categories IS NULL OR pd.category = ANY(p_categories))
-    AND (p_tags IS NULL OR pd.tags && p_tags)
-    AND (p_classification IS NULL OR pd.classification = p_classification)
-  ORDER BY pd.updated_at DESC
-  LIMIT p_limit
-  OFFSET p_offset;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Note: search_personal_data function is defined in 002_mcp_functions.sql section below
+-- This duplicate definition has been removed to avoid conflicts
 
 -- RPC function for bulk operations on personal data
 CREATE OR REPLACE FUNCTION bulk_update_personal_data_tags(
@@ -376,7 +456,7 @@ BEGIN
       SELECT jsonb_agg(to_jsonb(pd.*))
       FROM personal_data pd
       WHERE pd.user_id = p_user_id AND pd.deleted_at IS NULL
-    )
+    ),
     'audit_logs', (
       SELECT jsonb_agg(to_jsonb(al.*))
       FROM data_access_log al
@@ -405,6 +485,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 2. Click "Add User" and create: sample@example.com / TestPassword123!
 -- 3. Copy the generated UUID and replace the placeholder below
 
+-- Sample data creation (commented out - uncomment and replace UUIDs after creating test user)
 -- First create a sample profile
 -- INSERT INTO profiles (
 --   user_id,
@@ -493,7 +574,27 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  result_count INTEGER;
 BEGIN
+  -- Log the search operation
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    p_user_id, 'READ', 'personal_data', NULL,
+    jsonb_build_object(
+      'operation_type', 'search',
+      'search_text', p_search_text,
+      'categories', p_categories,
+      'tags', p_tags,
+      'classification', p_classification,
+      'limit', p_limit,
+      'offset', p_offset
+    ),
+    inet_client_addr(), 'search_personal_data_function'
+  );
+
   RETURN QUERY
   SELECT 
     pd.id,
@@ -547,6 +648,23 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
+  -- Log the extract operation
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    p_user_id, 'READ', 'personal_data', NULL,
+    jsonb_build_object(
+      'operation_type', 'extract',
+      'category', p_category,
+      'tags', p_tags,
+      'filters', p_filters,
+      'limit', p_limit,
+      'offset', p_offset
+    ),
+    inet_client_addr(), 'extract_personal_data_function'
+  );
+
   RETURN QUERY
   SELECT 
     pd.id,
@@ -735,7 +853,7 @@ BEGIN
   LOOP
     -- Get the current record for logging
     SELECT * INTO old_record FROM personal_data 
-    WHERE id = record_id AND (p_hard_delete OR deleted_at IS NULL);
+    WHERE id = record_id AND (p_hard_delete = TRUE OR deleted_at IS NULL);
 
     IF FOUND THEN
       IF p_hard_delete THEN
@@ -754,10 +872,11 @@ BEGIN
         changes, ip_address, user_agent
       ) VALUES (
         old_record.user_id, 
-        CASE WHEN p_hard_delete THEN 'HARD_DELETE' ELSE 'SOFT_DELETE' END,
+        'DELETE',
         'personal_data', 
         record_id,
         jsonb_build_object(
+          'delete_type', CASE WHEN p_hard_delete THEN 'hard' ELSE 'soft' END,
           'hard_delete', p_hard_delete,
           'deleted_record', row_to_json(old_record)
         ),
