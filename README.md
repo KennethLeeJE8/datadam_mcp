@@ -1,177 +1,185 @@
-# Personal Data MCP Server
+# Datadam Personal Data MCP Server (Streamable HTTP)
 
-A Model Context Protocol (MCP) server that provides secure access to your personal data stored in a Supabase database. This server connects to a personal data management system and allows you to search and explore your data categories through MCP.
+Datadam is a Model Context Protocol (MCP) server backed by Supabase. It exposes streamable HTTP endpoints so multiple AI tools can share a single personal database. This guide focuses only on the streamable HTTP setup (no stdio).
 
-## Available Tools
+Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
-- **search-personal-data** - Search through personal data by title and content for a specific user
-- **extract-personal-data** - Extract groups of similar entries by tags from user profiles  
-- **create-personal-data** - Automatically capture and store personal data mentioned in conversations
-- **update-personal-data** - Update existing personal data records with new information
-- **delete-personal-data** - Delete personal data records with GDPR compliance options
+## Tools Overview
 
-## Installation
+- How it works
+  - MCP clients discover tools automatically once connected. You invoke tools from your AI tool’s UI; results are returned inline.
+  - Most server tools expect a `userId` (use your Supabase Auth user UUID). Some clients let you set it via an env field; otherwise pass it as an argument when invoking tools.
+  - Categories (e.g., `books`, `contacts`) and optional `tags` help narrow results; you can omit them for broader searches.
 
-1. Clone this repository:
-   ```bash
-   git clone <repository-url>
-   cd datadam_mcp
-   ```
+- Server tools (at `…/mcp`)
+  - search-personal-data: Find records by title and content. Args: `query` (required), `userId` (required), optional `categories`, `tags`, `classification`, `limit`.
+  - extract-personal-data: Return items in a category, optionally filtered by `tags`. Great for “my <category>”. Args: `category` (required), optional `tags`, `userId`, `limit`.
+  - create-personal-data: Store a new record. Args include `userId`, `category`, `title`, `content`, optional `tags`, `classification`.
+  - update-personal-data: Update an existing record. Args: `recordId` plus the fields you want to change.
+  - delete-personal-data: Delete records by ID(s). Args: `recordIds` (array), optional `hardDelete` for permanent removal.
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+- ChatGPT endpoint tools (at `…/chatgpt_mcp`)
+  - search: Returns a lightweight `{ results: [{ id, title, url }, …] }` array for citations.
+  - fetch: Returns full document content `{ id, title, text, url, metadata }` for a given `id`.
 
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` and add your Supabase credentials:
-   - `SUPABASE_URL` - Your Supabase project URL
-   - `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
-   - `DATABASE_USER_ID` - Your user UUID from the auth.users table
+## Quickstart
 
-4. Build the TypeScript code:
-   ```bash
-   npm run build
-   ```
+1) Prepare Supabase
+- Create a project in Supabase.
+- Create a user in Authentication → Users; copy the UUID for later.
+- Load the schema using `psql` and the Transaction Pooler connection string:
+  - `psql "<transaction_pooler_string>" -f src/database/schema.sql`
+- Insert a profile row for your Auth user:
+  - `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
 
-## Usage
+2) Deploy to Render (HTTP)
+- Create a Web Service from this repo (Render auto-detects `render.yaml`).
+- Build: `npm install && npm run build`
+- Start: `npm start`
+- Health check path: `/health`
 
-### Claude Desktop Integration
+3) Set environment variables in Render (not in `.env`)
+- Required: `SUPABASE_URL`
+- One of: `SUPABASE_SERVICE_ROLE_KEY` (full CRUD) or `SUPABASE_ANON_KEY` (read/limited writes)
+- `DATABASE_USER_ID` — the Auth user UUID you created
+- `NODE_ENV=production`
 
-To use this MCP server with Claude Desktop, add the following configuration to your Claude Desktop config file at `/Users/kenne/Library/Application Support/Claude/claude_desktop_config.json`:
+4) Your public endpoints
+- Full MCP: `https://<service>.onrender.com/mcp`
+- ChatGPT-specific MCP: `https://<service>.onrender.com/chatgpt_mcp` (exposes `search`, `fetch`)
 
-```json
+## Prerequisites
+
+- Accounts: Supabase (required), Render (for hosting)
+- CLI: PostgreSQL client `psql`, Node.js + npm (for building before deploy if needed)
+
+## Supabase Setup (Details)
+
+1) Create a user (Auth)
+- Supabase Dashboard → Authentication → Users → Add user
+- Copy the user UUID (used as `DATABASE_USER_ID`)
+
+2) Load schema with `psql`
+- Supabase → Project settings → Database → Connection strings → choose Transaction Pooler (`psql`)
+- Run: `psql "<transaction_pooler_string>" -f src/database/schema.sql` (file: src/database/schema.sql)
+
+3) Insert a profile row for that user
+- `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
+
+4) Optional checks
+- `select * from profiles where user_id = '<AUTH_USER_UUID>'::uuid;`
+- `select * from get_active_categories();`
+
+## Render Deployment
+
+- Repo includes `render.yaml` with sane defaults (render.yaml)
+- Service type: Web Service
+- Build command: `npm install && npm run build`
+- Start command: `npm start`
+- Health check path: `/health`
+- Plan tips: The free tier is fine for testing but can crash or hit limits; use a higher tier (e.g., Standard) for good uptime
+
+Environment (Render dashboard)
+- `SUPABASE_URL`
+- One of `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_ANON_KEY`
+- `DATABASE_USER_ID`
+- `NODE_ENV=production`
+
+## Client Configuration Examples (HTTP)
+
+Notes
+- All examples use streamable HTTP. No stdio is required.
+- The server’s database credentials belong in Render environment variables, not in clients.
+- Some tools require a `userId` argument when calling tools like `search-personal-data`. If your client supports passing env to tool calls, you may set a default (e.g., `DATABASE_USER_ID`) in client config; otherwise include `userId` explicitly when invoking tools.
+
+Claude Code (VS Code)
+- Settings file may vary by installation; this illustrates the structure expected by Claude Code’s MCP configuration.
+```
 {
   "mcpServers": {
     "datadam": {
-      "command": "node",
-      "args": [
-        "/path/to/your/datadam_mcp/stdio-mcp-bridge.js",
-        "https://datadam-mcp.onrender.com"
-      ],
+      "type": "http",
+      "url": "https://<YOUR_RENDER_URL>/mcp",
       "env": {
         "DEBUG": "true",
-        "MCP_API_KEY": "INSERT_API_KEY_HERE"
+        "DATABASE_USER_ID": "<YOUR_DATABASE_USER_ID>"
       }
     }
   }
 }
 ```
 
-Replace `INSERT_API_KEY_HERE` with your actual API key for the datadam service.
+Claude Desktop (Custom Connector)
+- Open Claude Desktop → Connectors → Add Custom Connector.
+- Name: `datadam`
+- Type: HTTP
+- URL: `https://<YOUR_RENDER_URL>/mcp`
+- No local `.env` needed; the server reads credentials from Render.
 
-### Running the Server
+ChatGPT (Connectors / Deep Research)
+- Enable Developer Mode in Settings → Connectors → Advanced → Developer mode.
+- Add a custom MCP server using the ChatGPT endpoint:
+  - URL: `https://<YOUR_RENDER_URL>/chatgpt_mcp`
+- The server implements `search` and `fetch` as required.
 
-#### Development mode (with hot reload):
-```bash
-npm run dev
+Cursor (and similar coding agents)
+- Many editors/agents use a similar JSON shape for MCP servers. Adapt paths and UI as needed.
+```
+{
+  "mcpServers": {
+    "datadam": {
+      "type": "http",
+      "url": "https://<YOUR_RENDER_URL>/mcp",
+      "env": {
+        "DATABASE_USER_ID": "<YOUR_DATABASE_USER_ID>"
+      }
+    }
+  }
+}
 ```
 
-#### Production mode:
-```bash
-npm start
-```
+Generic MCP Clients
+- If your tool supports MCP over HTTP, configure:
+  - Type: `http`
+  - URL: `https://<service>.onrender.com/mcp`
+  - Optional env (client-side convenience only): `{ "DATABASE_USER_ID": "<uuid>" }`
 
-The server will start on `http://localhost:3000` and display available endpoints and capabilities.
+## Verify
 
-### Testing with MCP Inspector
+- Health endpoint only
+  - Local (if running locally for debugging): `curl http://localhost:3000/health`
+  - Hosted (Render): `curl https://<service>.onrender.com/health`
 
-The MCP Inspector is a testing tool that lets you interact with your MCP server:
+## Endpoints & Tools
 
-1. Start the MCP server in one terminal:
-   ```bash
-   npm run dev
-   ```
+- Endpoints
+  - `POST/GET/DELETE /mcp` — Streamable HTTP MCP
+  - `POST/GET/DELETE /chatgpt_mcp` — ChatGPT‑oriented MCP
 
-2. In another terminal, start the MCP Inspector:
-   ```bash
-   npm run inspector
-   ```
+- Tools (server)
+  - `search-personal-data`, `extract-personal-data`, `create-personal-data`, `update-personal-data`, `delete-personal-data`
 
-3. In the MCP Inspector interface:
-   - **Server URL**: Enter `http://localhost:3000/mcp`
-   - **Transport**: Select "HTTP"
-   - Click "Connect"
-
-### Example Interactions
-
-#### Using Resources
-
-1. In MCP Inspector, go to the "Resources" tab
-2. You'll see the "Data Categories" resource
-3. Click on `data://categories` to see your available personal data categories
-
-#### Using Tools
-
-1. In MCP Inspector, go to the "Tools" tab  
-2. Select "search-personal-data" tool
-3. Required fields:
-   - `query`: Your search term (e.g., "book", "contact", "work")
-   - `userId`: Your user UUID (e.g., "399aa002-cb10-40fc-abfe-d2656eea0199")
-4. Optional filters:
-   - `categories`: ["books"], ["contacts"], etc.
-   - `classification`: "personal", "sensitive", etc.
-   - `limit`: Number of results (default 20)
-
-## API Endpoints
-
-The server exposes the following HTTP endpoints:
-
-- `POST /mcp` - Client-to-server communication
-- `GET /mcp` - Server-to-client notifications (SSE)
-- `DELETE /mcp` - Session termination
-
-
-## Development
-
-### Scripts
-
-- `npm run dev` - Start server in development mode
-- `npm run build` - Build TypeScript to JavaScript  
-- `npm start` - Start production server
-- `npm run inspector` - Launch MCP Inspector for testing
-
-
-## Technical Details
-
-- **Framework**: Express.js with TypeScript
-- **Database**: Supabase (PostgreSQL) with Row Level Security
-- **MCP SDK**: `@modelcontextprotocol/sdk`
-- **Transport**: Streamable HTTP with session management
-- **CORS**: Configured for browser-based clients
-- **Environment**: dotenv for configuration management
+- Tools (ChatGPT endpoint)
+  - `search`, `fetch`
 
 ## Troubleshooting
 
-### Common Issues
+- Health check fails
+  - Verify Render env vars are set; inspect Render logs
+  - Confirm Supabase URL/key values
 
-1. **Database connection failed**: 
-   - Check your `.env` file has correct Supabase credentials
-   - Verify `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are correct
-   - Ensure the database schema is properly set up
+- Empty categories/data
+  - Insert data; run `select * from get_active_categories();`
 
-2. **Missing user ID error**: 
-   - Add your user UUID to `DATABASE_USER_ID` in `.env`
-   - Get this from Supabase Dashboard > Authentication > Users
+- Client cannot connect
+  - Use the `…/mcp` URL (or `…/chatgpt_mcp` for ChatGPT)
+  - Check CORS/firewall and that the service is not sleeping (Starter tier)
 
-3. **No categories found**: 
-   - The database might be empty
-   - Add some test data to the `personal_data` table
-   - Categories are auto-generated based on data content
+## Security Notes
 
-4. **TypeScript compilation errors**: 
-   ```bash
-   npm install
-   npm run build
-   ```
-
-5. **Inspector connection fails**: 
-   - Ensure the server is running on `http://localhost:3000`
-   - Check that no firewall is blocking the connection
-   - Verify the URL is exactly `http://localhost:3000/mcp`
+- No authentication yet — do not store sensitive data
+- Prefer `SUPABASE_ANON_KEY` for read-heavy demos; use `SERVICE_ROLE_KEY` only when necessary and always server-side (Render)
+- OAuth and stronger auth are planned
 
 ## License
 

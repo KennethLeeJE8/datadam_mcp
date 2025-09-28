@@ -552,7 +552,7 @@ DROP FUNCTION IF EXISTS delete_personal_data(UUID[], BOOLEAN) CASCADE;
 
 -- Function to search personal data by text and filters
 CREATE OR REPLACE FUNCTION search_personal_data(
-  p_user_id UUID,
+  p_user_id UUID DEFAULT NULL,
   p_search_text TEXT,
   p_categories TEXT[] DEFAULT NULL,
   p_tags TEXT[] DEFAULT NULL,
@@ -609,7 +609,7 @@ BEGIN
   FROM personal_data pd
   WHERE 
     pd.deleted_at IS NULL
-    AND pd.user_id = p_user_id
+    AND (p_user_id IS NULL OR pd.user_id = p_user_id)
     AND (
       p_search_text IS NULL OR
       pd.title ILIKE '%' || p_search_text || '%' OR
@@ -690,7 +690,7 @@ $$;
 
 -- Function to create new personal data record
 CREATE OR REPLACE FUNCTION create_personal_data(
-  p_user_id UUID,
+  p_user_id UUID DEFAULT NULL,
   p_category TEXT,
   p_title TEXT,
   p_content JSONB,
