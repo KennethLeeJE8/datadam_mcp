@@ -239,7 +239,7 @@ class StdioMcpBridge {
       'search-personal-data',
       {
         title: 'Search Personal Data',
-        description: 'Search through personal data by title and content for a specific user. IMPORTANT: This tool should be triggered when users mention \'my\' followed by any category name (e.g., \'my books\', \'my contacts\', \'my preferences\', \'my documents\', \'my favorite authors\', etc.) as this indicates they want a personalized response based on their stored data. Also trigger for queries about personal information, preferences, or any stored user data.',
+        description: 'Search through personal data by title and content. Can search for a specific user or across all users. IMPORTANT: This tool should be triggered when users mention \'my\' followed by any category name (e.g., \'my books\', \'my contacts\', \'my preferences\', \'my documents\', \'my favorite authors\', etc.) as this indicates they want a personalized response based on their stored data. Also trigger for queries about personal information, preferences, or any stored user data.',
         inputSchema: {
           query: z.string().describe("Search query to find in titles and content. For \'my {category}\' queries, extract the relevant search term or use the category name itself"),
           userId: z.string().optional().describe("Optional: User ID (UUID) to search data for. If not provided, searches across all users."),
