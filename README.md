@@ -8,19 +8,30 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 - How it works
   - MCP clients discover tools automatically once connected. You invoke tools from your AI tool’s UI; results are returned inline.
-  - Most server tools expect a `userId` (use your Supabase Auth user UUID). Some clients let you set it via an env field; otherwise pass it as an argument when invoking tools.
-  - Categories (e.g., `books`, `contacts`) and optional `tags` help narrow results; you can omit them for broader searches.
+  - Categories group related records (e.g., `books`, `contacts`, `documents`). Use them for discovery and filtering.
+  - Tags are optional labels (e.g., `family`, `work`, `sci-fi`) for finer filtering within a category.
+  - Records store structured JSON content and metadata; you can search by title/content or list by category.
+
+- Data model
+  - Record fields include: `id`, `title`, `category`, `content` (JSON), `tags` (string[]), `classification` (`public` | `personal` | `sensitive` | `confidential`), `created_at`, `updated_at`.
+  - Categories are maintained in the database and surfaced via the `data://categories` resource.
 
 - Server tools (at `…/mcp`)
-  - search-personal-data: Find records by title and content. Args: `query` (required), `userId` (required), optional `categories`, `tags`, `classification`, `limit`.
-  - extract-personal-data: Return items in a category, optionally filtered by `tags`. Great for “my <category>”. Args: `category` (required), optional `tags`, `userId`, `limit`.
-  - create-personal-data: Store a new record. Args include `userId`, `category`, `title`, `content`, optional `tags`, `classification`.
-  - update-personal-data: Update an existing record. Args: `recordId` plus the fields you want to change.
-  - delete-personal-data: Delete records by ID(s). Args: `recordIds` (array), optional `hardDelete` for permanent removal.
+
+| Tool | Title | Purpose | Required | Optional | Example args |
+| --- | --- | --- | --- | --- | --- |
+| `search-personal-data` | Search Personal Data | Find records by title and content; filter by categories/tags. | `query` | `categories`, `tags`, `classification`, `limit`, `userId` | `{ "query": "contacts", "categories": ["contacts"], "limit": 10 }` |
+| `extract-personal-data` | Extract Personal Data by Category | List items in one category, optionally filtered by tags. | `category` | `tags`, `limit`, `offset`, `userId`, `filters` | `{ "category": "contacts", "tags": ["family"], "limit": 20 }` |
+| `create-personal-data` | Create Personal Data | Store a new record with category, title, and JSON content. | `category`, `title`, `content` | `tags`, `classification`, `userId` | `{ "category": "documents", "title": "Passport", "content": {"number": "..."}, "tags": ["important"] }` |
+| `update-personal-data` | Update Personal Data | Update fields on an existing record by ID. | `recordId` | `title`, `content`, `tags`, `category`, `classification` | `{ "recordId": "<UUID>", "title": "New Title" }` |
+| `delete-personal-data` | Delete Personal Data | Delete one or more records; optional hard delete. | `recordIds` | `hardDelete` | `{ "recordIds": ["<UUID1>", "<UUID2>"], "hardDelete": false }` |
 
 - ChatGPT endpoint tools (at `…/chatgpt_mcp`)
-  - search: Returns a lightweight `{ results: [{ id, title, url }, …] }` array for citations.
-  - fetch: Returns full document content `{ id, title, text, url, metadata }` for a given `id`.
+
+| Tool | Title | Purpose | Required | Optional | Example args |
+| --- | --- | --- | --- | --- | --- |
+| `search` | Search (ChatGPT) | Return citation-friendly results for a query. | `query` | — | `{ "query": "contacts" }` |
+| `fetch` | Fetch (ChatGPT) | Return full document content by ID. | `id` | — | `{ "id": "<DOCUMENT_ID>" }` |
 
 ## Quickstart
 
@@ -41,7 +52,6 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 3) Set environment variables in Render (not in `.env`)
 - Required: `SUPABASE_URL`
 - One of: `SUPABASE_SERVICE_ROLE_KEY` (full CRUD) or `SUPABASE_ANON_KEY` (read/limited writes)
-- `DATABASE_USER_ID` — the Auth user UUID you created
 - `NODE_ENV=production`
 
 4) Your public endpoints
@@ -57,7 +67,7 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 1) Create a user (Auth)
 - Supabase Dashboard → Authentication → Users → Add user
-- Copy the user UUID (used as `DATABASE_USER_ID`)
+- Copy the user UUID for later (optional user scoping)
 
 2) Load schema with `psql`
 - Supabase → Project settings → Database → Connection strings → choose Transaction Pooler (`psql`)
@@ -82,7 +92,6 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 Environment (Render dashboard)
 - `SUPABASE_URL`
 - One of `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_ANON_KEY`
-- `DATABASE_USER_ID`
 - `NODE_ENV=production`
 
 ## Client Configuration Examples (HTTP)
@@ -90,7 +99,7 @@ Environment (Render dashboard)
 Notes
 - All examples use streamable HTTP. No stdio is required.
 - The server’s database credentials belong in Render environment variables, not in clients.
-- Some tools require a `userId` argument when calling tools like `search-personal-data`. If your client supports passing env to tool calls, you may set a default (e.g., `DATABASE_USER_ID`) in client config; otherwise include `userId` explicitly when invoking tools.
+  
 
 Claude Code (VS Code)
 - Settings file may vary by installation; this illustrates the structure expected by Claude Code’s MCP configuration.
@@ -101,8 +110,7 @@ Claude Code (VS Code)
       "type": "http",
       "url": "https://<YOUR_RENDER_URL>/mcp",
       "env": {
-        "DEBUG": "true",
-        "DATABASE_USER_ID": "<YOUR_DATABASE_USER_ID>"
+        "DEBUG": "true"
       }
     }
   }
@@ -129,10 +137,7 @@ Cursor (and similar coding agents)
   "mcpServers": {
     "datadam": {
       "type": "http",
-      "url": "https://<YOUR_RENDER_URL>/mcp",
-      "env": {
-        "DATABASE_USER_ID": "<YOUR_DATABASE_USER_ID>"
-      }
+      "url": "https://<YOUR_RENDER_URL>/mcp"
     }
   }
 }
@@ -142,13 +147,18 @@ Generic MCP Clients
 - If your tool supports MCP over HTTP, configure:
   - Type: `http`
   - URL: `https://<service>.onrender.com/mcp`
-  - Optional env (client-side convenience only): `{ "DATABASE_USER_ID": "<uuid>" }`
 
 ## Verify
 
 - Health endpoint only
   - Local (if running locally for debugging): `curl http://localhost:3000/health`
   - Hosted (Render): `curl https://<service>.onrender.com/health`
+
+## Optional: Default User Context
+
+- Some tools can scope operations to a particular user by accepting a `userId` argument (UUID from Supabase Auth). This field is optional.
+- If your client supports passing environment variables to tool calls, you may set a convenience variable like `DATABASE_USER_ID` in the client’s MCP config and have your prompts/tools use it when needed.
+- Otherwise, just supply `userId` explicitly in the tool call input when you want to target a specific user.
 
 ## Endpoints & Tools
 
