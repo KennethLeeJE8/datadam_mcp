@@ -13,25 +13,26 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
   - Records store structured JSON content and metadata; you can search by title/content or list by category.
 
 - Data model
-  - Record fields include: `id`, `title`, `category`, `content` (JSON), `tags` (string[]), `classification` (`public` | `personal` | `sensitive` | `confidential`), `created_at`, `updated_at`.
+  - Record fields include: `id`, `title`, `category`, `content` (JSON), `tags` (string[]), `classification`, `created_at`, `updated_at`.
   - Categories are maintained in the database and surfaced via the `data://categories` resource.
+  - Filtering order: choose a category first, then use `tags` to further narrow results within that category (tags are optional refinements, not replacements).
 
 - Server tools (at `…/mcp`)
 
-| Tool | Title | Purpose | Required | Optional | Example args |
-| --- | --- | --- | --- | --- | --- |
-| `search-personal-data` | Search Personal Data | Find records by title and content; filter by categories/tags. | `query` | `categories`, `tags`, `classification`, `limit`, `userId` | `{ "query": "contacts", "categories": ["contacts"], "limit": 10 }` |
-| `extract-personal-data` | Extract Personal Data by Category | List items in one category, optionally filtered by tags. | `category` | `tags`, `limit`, `offset`, `userId`, `filters` | `{ "category": "contacts", "tags": ["family"], "limit": 20 }` |
-| `create-personal-data` | Create Personal Data | Store a new record with category, title, and JSON content. | `category`, `title`, `content` | `tags`, `classification`, `userId` | `{ "category": "documents", "title": "Passport", "content": {"number": "..."}, "tags": ["important"] }` |
-| `update-personal-data` | Update Personal Data | Update fields on an existing record by ID. | `recordId` | `title`, `content`, `tags`, `category`, `classification` | `{ "recordId": "<UUID>", "title": "New Title" }` |
-| `delete-personal-data` | Delete Personal Data | Delete one or more records; optional hard delete. | `recordIds` | `hardDelete` | `{ "recordIds": ["<UUID1>", "<UUID2>"], "hardDelete": false }` |
+| Tool | Title | Purpose | Required | Optional |
+| --- | --- | --- | --- | --- |
+| `search-personal-data` | Search Personal Data | Find records by title and content; filter by categories/tags. | `query` | `categories`, `tags`, `classification`, `limit`, `userId` |
+| `extract-personal-data` | Extract Personal Data by Category | List items in one category, optionally filtered by tags. | `category` | `tags`, `limit`, `offset`, `userId`, `filters` |
+| `create-personal-data` | Create Personal Data | Store a new record with category, title, and JSON content. | `category`, `title`, `content` | `tags`, `classification`, `userId` |
+| `update-personal-data` | Update Personal Data | Update fields on an existing record by ID. | `recordId` | `title`, `content`, `tags`, `category`, `classification` |
+| `delete-personal-data` | Delete Personal Data | Delete one or more records; optional hard delete. | `recordIds` | `hardDelete` |
 
 - ChatGPT endpoint tools (at `…/chatgpt_mcp`)
 
-| Tool | Title | Purpose | Required | Optional | Example args |
-| --- | --- | --- | --- | --- | --- |
-| `search` | Search (ChatGPT) | Return citation-friendly results for a query. | `query` | — | `{ "query": "contacts" }` |
-| `fetch` | Fetch (ChatGPT) | Return full document content by ID. | `id` | — | `{ "id": "<DOCUMENT_ID>" }` |
+| Tool | Title | Purpose | Required | Optional |
+| --- | --- | --- | --- | --- |
+| `search` | Search (ChatGPT) | Return citation-friendly results for a query. | `query` | — |
+| `fetch` | Fetch (ChatGPT) | Return full document content by ID. | `id` | — |
 
 ## Quickstart
 
@@ -51,7 +52,7 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 3) Set environment variables in Render (not in `.env`)
 - Required: `SUPABASE_URL`
-- One of: `SUPABASE_SERVICE_ROLE_KEY` (full CRUD) or `SUPABASE_ANON_KEY` (read/limited writes)
+- Required: `SUPABASE_SERVICE_ROLE_KEY` (full CRUD)
 - `NODE_ENV=production`
 
 4) Your public endpoints
@@ -91,7 +92,7 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 Environment (Render dashboard)
 - `SUPABASE_URL`
-- One of `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `NODE_ENV=production`
 
 ## Client Configuration Examples (HTTP)
@@ -172,6 +173,85 @@ Generic MCP Clients
 - Tools (ChatGPT endpoint)
   - `search`, `fetch`
 
+## Tool Details
+
+Server tools (at `…/mcp`)
+- search-personal-data
+  - Purpose: Find records by title and content; optionally filter by categories and tags.
+  - Args: `query` (required); `categories?` string[]; `tags?` string[]; `classification?` one of `public|personal|sensitive|confidential`; `limit?` number (default 20); `userId?` string (UUID).
+  - Example:
+    ```json
+    {
+      "query": "contacts John",
+      "categories": ["contacts"],
+      "limit": 10
+    }
+    ```
+
+- extract-personal-data
+  - Purpose: List items in a single category; refine with tags.
+  - Args: `category` (required string); `tags?` string[]; `limit?` number (default 50); `offset?` number; `userId?` string (UUID); `filters?` object.
+  - Example:
+    ```json
+    {
+      "category": "contacts",
+      "tags": ["family"],
+      "limit": 20
+    }
+    ```
+
+- create-personal-data
+  - Purpose: Store a new record.
+  - Args: `category` (required string); `title` (required string); `content` (required object/JSON); `tags?` string[]; `classification?` (default `personal`); `userId?` string (UUID).
+  - Example:
+    ```json
+    {
+      "category": "documents",
+      "title": "Passport",
+      "content": { "number": "A123...", "country": "US" },
+      "tags": ["important"]
+    }
+    ```
+
+- update-personal-data
+  - Purpose: Update fields on an existing record by ID.
+  - Args: `recordId` (required string UUID); plus any fields to change: `title?`, `content?`, `tags?`, `category?`, `classification?`.
+  - Example:
+    ```json
+    {
+      "recordId": "<UUID>",
+      "title": "Emergency Contact – Updated"
+    }
+    ```
+
+- delete-personal-data
+  - Purpose: Delete one or more records; optional hard delete for permanent removal.
+  - Args: `recordIds` (required string[] of UUIDs); `hardDelete?` boolean (default false).
+  - Example:
+    ```json
+    {
+      "recordIds": ["<UUID1>", "<UUID2>"],
+      "hardDelete": false
+    }
+    ```
+
+ChatGPT endpoint tools (at `…/chatgpt_mcp`)
+- search
+  - Purpose: Return citation-friendly results for a query.
+  - Args: `query` (required string).
+  - Example:
+    ```json
+    { "query": "contacts" }
+    ```
+
+- fetch
+  - Purpose: Return full document content by ID.
+  - Args: `id` (required string UUID).
+  - Example:
+    ```json
+    { "id": "<DOCUMENT_ID>" }
+    ```
+
 ## Troubleshooting
 
 - Health check fails
@@ -188,8 +268,13 @@ Generic MCP Clients
 ## Security Notes
 
 - No authentication yet — do not store sensitive data
-- Prefer `SUPABASE_ANON_KEY` for read-heavy demos; use `SERVICE_ROLE_KEY` only when necessary and always server-side (Render)
+- Use `SUPABASE_SERVICE_ROLE_KEY` (server-side only in Render) for full functionality and the complete toolset.
 - OAuth and stronger auth are planned
+
+### Optional: Using the Supabase Anon Key
+
+- If you need read/limited writes only, you can deploy with `SUPABASE_ANON_KEY` instead of the service role key.
+- Writes will depend on your Row Level Security (RLS) policies, and some tools (create/update/delete) may fail under anon.
 
 ## License
 
