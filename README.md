@@ -1,6 +1,6 @@
-# Datadam Personal Data MCP Server (Streamable HTTP)
+# Datadam Personal Data MCP Server
 
-Datadam is a Model Context Protocol (MCP) server backed by Supabase. It exposes streamable HTTP endpoints so multiple AI tools can share a single personal database. This guide focuses only on the streamable HTTP setup (no stdio).
+Datadam is a Model Context Protocol (MCP) server backed by Supabase. It supports both streamable HTTP endpoints and stdio connections, allowing multiple AI tools to share a single personal database.
 
 Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
@@ -34,15 +34,30 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 | `search` | Search (ChatGPT) | Return citation-friendly results for a query. | `query` | — |
 | `fetch` | Fetch (ChatGPT) | Return full document content by ID. | `id` | — |
 
+## Connection Types
+
+Datadam supports two connection methods:
+
+### HTTP (Streamable)
+- **Use case**: Hosted deployments, multiple clients, web-based AI tools
+- **Setup**: Deploy to cloud service (e.g., Render), configure clients with URL
+- **Environment**: Server-side environment variables in hosting platform
+- **Protocol**: HTTP/HTTPS with MCP over streamable transport
+
+### Stdio (Standard Input/Output)
+- **Use case**: Local development, single-client setups, desktop AI applications
+- **Setup**: Run server.js locally, configure clients to launch the process
+- **Environment**: Local environment variables or passed via client config
+- **Protocol**: MCP over stdio transport with direct process communication
+
 ## Quickstart
+
+Happy to help if you have any problems w the setup! Shoot me a message or send me an email at kennethleeje8@gmail.com :)
 
 1) Prepare Supabase
 - Create a project in Supabase.
-- Create a user in Authentication → Users; copy the UUID for later.
 - Load the schema using `psql` and the Transaction Pooler connection string:
   - `psql "<transaction_pooler_string>" -f src/database/schema.sql`
-- Insert a profile row for your Auth user:
-  - `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
 
 2) Deploy to Render (HTTP)
 - Create a Web Service from this repo (Render auto-detects `render.yaml`).
@@ -72,14 +87,10 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 2) Load schema with `psql`
 - Supabase → Project settings → Database → Connection strings → choose Transaction Pooler (`psql`)
-- Run: `psql "<transaction_pooler_string>" -f src/database/schema.sql` (file: src/database/schema.sql)
+- Run: `psql "<transaction_pooler_string>" -f src/database/schema.sql` in sql (file: src/database/schema.sql)
+- If you don't have `psql` installed, download PostgreSQL and the CLI from the official site: [PostgreSQL Downloads](https://www.postgresql.org/download/)
 
-3) Insert a profile row for that user
-- `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
-
-4) Optional checks
-- `select * from profiles where user_id = '<AUTH_USER_UUID>'::uuid;`
-- `select * from get_active_categories();`
+3) You should see your Supabase table editor view populated with tables. 
 
 ## Render Deployment
 
@@ -95,11 +106,15 @@ Environment (Render dashboard)
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `NODE_ENV=production`
 
-## Client Configuration Examples (HTTP)
+## Client Configuration Examples
+
+### HTTP Connections
+
+For hosted deployments using streamable HTTP:
 
 Notes
-- All examples use streamable HTTP. No stdio is required.
-- The server’s database credentials belong in Render environment variables, not in clients.
+- All examples use streamable HTTP with hosted server URLs
+- The server's database credentials belong in hosting platform environment variables, not in clients
   
 
 Claude Code (VS Code)
@@ -126,6 +141,8 @@ Claude Desktop (Custom Connector)
 - No local `.env` needed; the server reads credentials from Render.
 
 ChatGPT (Connectors / Deep Research)
+- **Note**: ChatGPT only supports HTTP connections, not stdio
+- **Requirement**: Custom connectors require ChatGPT Pro, Business, Enterprise, or Edu subscription
 - Enable Developer Mode in Settings → Connectors → Advanced → Developer mode.
 - Add a custom MCP server using the ChatGPT endpoint:
   - URL: `https://<YOUR_RENDER_URL>/chatgpt_mcp`
@@ -149,16 +166,76 @@ Generic MCP Clients
   - Type: `http`
   - URL: `https://<service>.onrender.com/mcp`
 
+### Stdio Connections
+
+For local development using stdio transport:
+
+Notes
+- Clone this repository locally and use the `server.js` file
+- Environment variables are passed via client configuration or local `.env` file
+- The client launches the server process directly
+
+Claude Desktop
+- Open Claude Desktop → Settings → Developer → Edit Config
+- Add the following MCP server configuration:
+```json
+{
+  "mcpServers": {
+    "datadam": {
+      "command": "node",
+      "args": ["path/to/server.js"],
+      "cwd": "cloned github directory",
+      "env": {
+        "SUPABASE_URL": "your_supabase_url",
+        "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
+      }
+    }
+  }
+}
+```
+
+Coding Agents (Claude Code, Gemini CLI, Cursor etc.)
+```json
+{
+  "mcpServers": {
+    "datadam": {
+      "command": "node",
+      "args": ["./server.js"],
+      "cwd": "/absolute/path/to/datadam_mcp",
+      "env": {
+        "SUPABASE_URL": "your_supabase_url",
+        "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
+      }
+    }
+  }
+}
+```
 ## Verify
 
+### HTTP Connections
 - Health endpoint only
   - Local (if running locally for debugging): `curl http://localhost:3000/health`
   - Hosted (Render): `curl https://<service>.onrender.com/health`
 
-## Optional: Default User Context
+### Stdio Connections
+- Test the stdio server directly:
+  - Navigate to project directory: `cd /path/to/datadam_mcp`
+  - Set environment variables: `export SUPABASE_URL="your_url"` and `export SUPABASE_SERVICE_ROLE_KEY="your_key"`
+  - Run server: `node server.js`
+  - Server should connect to Supabase and display available categories
 
+## Optional: User Setup and Context
+
+If you want to scope data to specific users, you can set up user authentication and profiles:
+
+### User Creation and Profile Setup
+- Create a user in Supabase Authentication → Users; copy the UUID for later.
+- Insert a profile row for your Auth user:
+  - `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
+
+### Using User Context
 - Some tools can scope operations to a particular user by accepting a `userId` argument (UUID from Supabase Auth). This field is optional.
-- If your client supports passing environment variables to tool calls, you may set a convenience variable like `DATABASE_USER_ID` in the client’s MCP config and have your prompts/tools use it when needed.
+- If your client supports passing environment variables to tool calls, you may set a convenience variable like `DATABASE_USER_ID` in the client's MCP config and have your prompts/tools use it when needed.
 - Otherwise, just supply `userId` explicitly in the tool call input when you want to target a specific user.
 
 ## Endpoints & Tools
