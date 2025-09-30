@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- Flexible personal data storage with dynamic fields
 CREATE TABLE IF NOT EXISTS personal_data (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
+  user_id UUID,
   title TEXT NOT NULL,
   content JSONB NOT NULL,
   tags TEXT[],
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS personal_data (
 -- Audit trail for compliance and security
 CREATE TABLE IF NOT EXISTS data_access_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
+  user_id UUID,
   operation TEXT NOT NULL CHECK (operation IN ('CREATE', 'READ', 'UPDATE', 'DELETE')),
   table_name TEXT NOT NULL,
   record_id UUID,
@@ -543,17 +543,17 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- MCP Server Functions for Personal Data Management
 -- These functions provide the core CRUD operations for personal data
 
--- Drop existing functions first
-DROP FUNCTION IF EXISTS search_personal_data(UUID, TEXT, TEXT[], TEXT[], TEXT, INTEGER, INTEGER) CASCADE;
-DROP FUNCTION IF EXISTS extract_personal_data(TEXT, TEXT[], UUID, JSONB, INTEGER, INTEGER) CASCADE;
-DROP FUNCTION IF EXISTS create_personal_data(UUID, TEXT, TEXT, JSONB, TEXT[], TEXT) CASCADE;
-DROP FUNCTION IF EXISTS update_personal_data(UUID, JSONB, TEXT) CASCADE;
-DROP FUNCTION IF EXISTS delete_personal_data(UUID[], BOOLEAN) CASCADE;
+-- Drop existing functions first (drop by name to handle signature changes)
+DROP FUNCTION IF EXISTS search_personal_data CASCADE;
+DROP FUNCTION IF EXISTS extract_personal_data CASCADE;
+DROP FUNCTION IF EXISTS create_personal_data CASCADE;
+DROP FUNCTION IF EXISTS update_personal_data CASCADE;
+DROP FUNCTION IF EXISTS delete_personal_data CASCADE;
 
 -- Function to search personal data by text and filters
 CREATE OR REPLACE FUNCTION search_personal_data(
-  p_user_id UUID,
   p_search_text TEXT,
+  p_user_id UUID DEFAULT NULL,
   p_categories TEXT[] DEFAULT NULL,
   p_tags TEXT[] DEFAULT NULL,
   p_classification TEXT DEFAULT NULL,
@@ -609,7 +609,7 @@ BEGIN
   FROM personal_data pd
   WHERE 
     pd.deleted_at IS NULL
-    AND pd.user_id = p_user_id
+    AND (p_user_id IS NULL OR pd.user_id = p_user_id)
     AND (
       p_search_text IS NULL OR
       pd.title ILIKE '%' || p_search_text || '%' OR
@@ -690,10 +690,10 @@ $$;
 
 -- Function to create new personal data record
 CREATE OR REPLACE FUNCTION create_personal_data(
-  p_user_id UUID,
   p_category TEXT,
   p_title TEXT,
   p_content JSONB,
+  p_user_id UUID DEFAULT NULL,
   p_tags TEXT[] DEFAULT ARRAY[]::TEXT[],
   p_classification TEXT DEFAULT 'personal'
 )
