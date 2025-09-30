@@ -52,13 +52,12 @@ Datadam supports two connection methods:
 
 ## Quickstart
 
+Happy to help if you have any problems w the setup! Shoot me a message or send me an email at kennethleeje8@gmail.com :)
+
 1) Prepare Supabase
 - Create a project in Supabase.
-- Create a user in Authentication → Users; copy the UUID for later.
 - Load the schema using `psql` and the Transaction Pooler connection string:
   - `psql "<transaction_pooler_string>" -f src/database/schema.sql`
-- Insert a profile row for your Auth user:
-  - `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
 
 2) Deploy to Render (HTTP)
 - Create a Web Service from this repo (Render auto-detects `render.yaml`).
@@ -88,15 +87,10 @@ Datadam supports two connection methods:
 
 2) Load schema with `psql`
 - Supabase → Project settings → Database → Connection strings → choose Transaction Pooler (`psql`)
-- Run: `psql "<transaction_pooler_string>" -f src/database/schema.sql` (file: src/database/schema.sql)
+- Run: `psql "<transaction_pooler_string>" -f src/database/schema.sql` in sql (file: src/database/schema.sql)
 - If you don't have `psql` installed, download PostgreSQL and the CLI from the official site: [PostgreSQL Downloads](https://www.postgresql.org/download/)
 
-3) Insert a profile row for that user
-- `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
-
-4) Optional checks
-- `select * from profiles where user_id = '<AUTH_USER_UUID>'::uuid;`
-- `select * from get_active_categories();`
+3) You should see your Supabase table editor view populated with tables. 
 
 ## Render Deployment
 
@@ -192,8 +186,8 @@ Claude Desktop
       "args": ["path/to/server.js"],
       "cwd": "cloned github directory",
       "env": {
-        "SUPABASE_URL": "supabase url",
-        "SUPABASE_SERVICE_ROLE_KEY": "service key from supabase"
+        "SUPABASE_URL": "your_supabase_url",
+        "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
       }
     }
   }
@@ -210,7 +204,7 @@ Coding Agents (Claude Code, Gemini CLI, Cursor etc.)
       "cwd": "/absolute/path/to/datadam_mcp",
       "env": {
         "SUPABASE_URL": "your_supabase_url",
-        "SUPABASE_SERVICE_ROLE_KEY": "your_service_key"
+        "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
       }
     }
   }
@@ -230,10 +224,18 @@ Coding Agents (Claude Code, Gemini CLI, Cursor etc.)
   - Run server: `node server.js`
   - Server should connect to Supabase and display available categories
 
-## Optional: Default User Context
+## Optional: User Setup and Context
 
+If you want to scope data to specific users, you can set up user authentication and profiles:
+
+### User Creation and Profile Setup
+- Create a user in Supabase Authentication → Users; copy the UUID for later.
+- Insert a profile row for your Auth user:
+  - `INSERT INTO profiles (user_id, username, full_name, metadata) VALUES ('<AUTH_USER_UUID>'::uuid, 'your_username', 'Your Name', '{}'::jsonb);`
+
+### Using User Context
 - Some tools can scope operations to a particular user by accepting a `userId` argument (UUID from Supabase Auth). This field is optional.
-- If your client supports passing environment variables to tool calls, you may set a convenience variable like `DATABASE_USER_ID` in the client’s MCP config and have your prompts/tools use it when needed.
+- If your client supports passing environment variables to tool calls, you may set a convenience variable like `DATABASE_USER_ID` in the client's MCP config and have your prompts/tools use it when needed.
 - Otherwise, just supply `userId` explicitly in the tool call input when you want to target a specific user.
 
 ## Endpoints & Tools
