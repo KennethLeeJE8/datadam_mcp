@@ -39,3 +39,6 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# MCP Bridge
+stdio-mcp-bridge.js
