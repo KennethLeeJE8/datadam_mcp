@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "datadam": {
+      "command": "node",
+      "args": ["server.js"],
+      "env": {}
+    }
+  }
+}

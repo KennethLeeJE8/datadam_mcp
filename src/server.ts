@@ -5,7 +5,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 
 // Load environment variables
@@ -215,6 +216,7 @@ function createMcpServer(): McpServer {
             : String(item.content).substring(0, 200);
           
           return `${item.title}
+   Record ID: ${item.id}
    Category: ${item.category || 'Uncategorized'}
    Classification: ${item.classification}
    Tags: ${item.tags?.join(', ') || 'None'}
@@ -325,6 +327,7 @@ function createMcpServer(): McpServer {
             : String(item.content).substring(0, 200);
           
           return `${item.title}
+   Record ID: ${item.id}
    Category: ${item.category || 'Uncategorized'}
    Classification: ${item.classification}
    Tags: ${item.tags?.join(', ') || 'None'}

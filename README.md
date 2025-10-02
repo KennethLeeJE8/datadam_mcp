@@ -1,4 +1,6 @@
 # Datadam Personal Data MCP Server
+<<<<<<< Updated upstream
+# Personal Data MCP Server
 
 Datadam is a Model Context Protocol (MCP) server backed by Supabase. It supports both streamable HTTP endpoints and stdio connections, allowing multiple AI tools to share a single personal database.
 
@@ -64,15 +66,96 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 - Build: `npm install && npm run build`
 - Start: `npm start`
 - Health check path: `/health`
+A Model Context Protocol (MCP) server that provides secure access to your personal data stored in a Supabase database. This server connects to a personal data management system and allows you to search and explore your data categories through MCP.
+=======
+# DataDam Personal Data MCP Server
 
-3) Set environment variables in Render (not in `.env`)
-- Required: `SUPABASE_URL`
-- Required: `SUPABASE_SERVICE_ROLE_KEY` (full CRUD)
-- `NODE_ENV=production`
+DataDam is a Model Context Protocol (MCP) server backed by Supabase. It supports both streamable HTTP endpoints and stdio connections, allowing multiple AI tools to share a single personal database.
+>>>>>>> Stashed changes
 
-4) Your public endpoints
-- Full MCP: `https://<service>.onrender.com/mcp`
-- ChatGPT-specific MCP: `https://<service>.onrender.com/chatgpt_mcp` (exposes `search`, `fetch`)
+## Available Tools
+
+- **search-personal-data** - Search through personal data by title and content for a specific user
+- **extract-personal-data** - Extract groups of similar entries by tags from user profiles  
+- **create-personal-data** - Automatically capture and store personal data mentioned in conversations
+- **update-personal-data** - Update existing personal data records with new information
+- **delete-personal-data** - Delete personal data records with GDPR compliance options
+
+<<<<<<< Updated upstream
+## Installation
+
+1. Clone this repository:
+   ```bash
+   git clone <repository-url>
+   cd datadam_mcp
+   ```
+=======
+- How it works
+  - MCP clients discover tools automatically once connected. 
+  - Your AI tool will invoke the neccessary tools in your console/command line. 
+  - More information on how each tool works can be found [here](#tool-details)
+  - Categories group related records (e.g., `books`, `contacts`, `documents`). All datapoints are assigned to a category.
+  - Tags are optional labels (e.g., `family`, `work`, `sci-fi`) for finer filtering within a category.
+  - Records store structured JSON content and metadata; you can search by title/content or list by category.
+
+- Data model
+  - Categories are maintained in the database and surfaced via the `data://categories` resource, which are static at the moment. 
+  - Filtering order: choose a category first, then use `tags` to further narrow results within that category (tags are optional refinements, not replacements).
+>>>>>>> Stashed changes
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and add your Supabase credentials:
+   - `SUPABASE_URL` - Your Supabase project URL
+   - `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
+   - `DATABASE_USER_ID` - Your user UUID from the auth.users table
+
+4. Build the TypeScript code:
+   ```bash
+   npm run build
+   ```
+
+<<<<<<< Updated upstream
+## Usage
+=======
+ChatGPT only allows 2 tools and GET tools, so you cannot create data within ChatGPT. But you can use other AIs listed here to create data in your DataDam
+
+| Tool | Title | Purpose | Required | Optional |
+| --- | --- | --- | --- | --- |
+| `search` | Search (ChatGPT) | Return citation-friendly results for a query. | `query` | — |
+| `fetch` | Fetch (ChatGPT) | Return full document content by ID. | `id` | — |
+>>>>>>> Stashed changes
+
+### Claude Desktop Integration
+
+<<<<<<< Updated upstream
+To use this MCP server with Claude Desktop, add the following configuration to your Claude Desktop config file at `/Users/kenne/Library/Application Support/Claude/claude_desktop_config.json`:
+
+=======
+DataDam supports two connection methods:
+
+### HTTP (Streamable)
+- **Use case**: Hosted deployments, multiple clients, web-based AI tools
+- **Setup**: Deploy to cloud service (e.g., Render), configure clients with URL
+- **Environment**: Server-side environment variables in hosting platform
+- **Protocol**: HTTP/HTTPS with MCP over streamable transport
+
+### Stdio (Standard Input/Output)
+- **Use case**: Local development, single-client setups, desktop AI applications
+- **Setup**: Run server.js locally, configure clients to launch the process
+- **Environment**: Local environment variables or passed via client config
+- **Protocol**: MCP over stdio transport with direct process communication
+
+## Quickstart
+
+Happy to help if you have any problems w the setup! Shoot me a message or send me an email at kennethleeje8@gmail.com :)
 
 ## Prerequisites
 
@@ -94,6 +177,8 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 
 ## Render Deployment
 
+Feel free to use any hosting platfrom, this is personal preference. 
+
 - Repo includes `render.yaml` with sane defaults (render.yaml)
 - Service type: Web Service
 - Build command: `npm install && npm run build`
@@ -103,7 +188,9 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 
 Environment (Render dashboard)
 - `SUPABASE_URL`
+Find it in Project Settings → Data API → Project URL. 
 - `SUPABASE_SERVICE_ROLE_KEY`
+Find it in Project Settings → API Keys → service_role key.  
 - `NODE_ENV=production`
 
 ## Client Configuration Examples
@@ -113,29 +200,11 @@ Environment (Render dashboard)
 For hosted deployments using streamable HTTP:
 
 Notes
-- All examples use streamable HTTP with hosted server URLs
 - The server's database credentials belong in hosting platform environment variables, not in clients
-  
-
-Claude Code (VS Code)
-- Settings file may vary by installation; this illustrates the structure expected by Claude Code’s MCP configuration.
-```
-{
-  "mcpServers": {
-    "datadam": {
-      "type": "http",
-      "url": "https://<YOUR_RENDER_URL>/mcp",
-      "env": {
-        "DEBUG": "true"
-      }
-    }
-  }
-}
-```
 
 Claude Desktop (Custom Connector)
 - Open Claude Desktop → Connectors → Add Custom Connector.
-- Name: `datadam`
+- Name: `DataDam`
 - Type: HTTP
 - URL: `https://<YOUR_RENDER_URL>/mcp`
 - No local `.env` needed; the server reads credentials from Render.
@@ -153,7 +222,7 @@ Cursor (and similar coding agents)
 ```
 {
   "mcpServers": {
-    "datadam": {
+    "DataDam": {
       "type": "http",
       "url": "https://<YOUR_RENDER_URL>/mcp"
     }
@@ -172,16 +241,14 @@ For local development using stdio transport:
 
 Notes
 - Clone this repository locally and use the `server.js` file
-- Environment variables are passed via client configuration or local `.env` file
 - The client launches the server process directly
 
-Claude Desktop
-- Open Claude Desktop → Settings → Developer → Edit Config
-- Add the following MCP server configuration:
+MCP Client Config:
+>>>>>>> Stashed changes
 ```json
 {
   "mcpServers": {
-    "datadam": {
+    "DataDam": {
       "command": "node",
       "args": ["path/to/server.js"],
       "cwd": "cloned github directory",
@@ -194,35 +261,108 @@ Claude Desktop
 }
 ```
 
-Coding Agents (Claude Code, Gemini CLI, Cursor etc.)
-```json
-{
-  "mcpServers": {
-    "datadam": {
-      "command": "node",
-      "args": ["./server.js"],
-      "cwd": "/absolute/path/to/datadam_mcp",
-      "env": {
-        "SUPABASE_URL": "your_supabase_url",
-        "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
-      }
-    }
-  }
-}
+<<<<<<< Updated upstream
+Replace `INSERT_API_KEY_HERE` with your actual API key for the datadam service.
+
+### Running the Server
+
+#### Development mode (with hot reload):
+```bash
+npm run dev
 ```
+
+#### Production mode:
+```bash
+npm start
+```
+
+The server will start on `http://localhost:3000` and display available endpoints and capabilities.
+
+### Testing with MCP Inspector
+
+The MCP Inspector is a testing tool that lets you interact with your MCP server:
+
+1. Start the MCP server in one terminal:
+   ```bash
+   npm run dev
+   ```
+
+2. In another terminal, start the MCP Inspector:
+   ```bash
+   npm run inspector
+   ```
+=======
+Claude Desktop
+- Open Claude Desktop → Settings → Developer → Edit Config
+- Add the MCP server configuration
+
+Works w all the coding agents
+
 ## Verify
 
 ### HTTP Connections
-- Health endpoint only
-  - Local (if running locally for debugging): `curl http://localhost:3000/health`
-  - Hosted (Render): `curl https://<service>.onrender.com/health`
+- Health endpoint: `curl http://localhost:3000/health` (for local server)
+- Test with inspector: `npm run inspector:http` (requires local server running with `npm run dev`)
 
 ### Stdio Connections
-- Test the stdio server directly:
-  - Navigate to project directory: `cd /path/to/datadam_mcp`
-  - Set environment variables: `export SUPABASE_URL="your_url"` and `export SUPABASE_SERVICE_ROLE_KEY="your_key"`
-  - Run server: `node server.js`
-  - Server should connect to Supabase and display available categories
+- Configure `.env` file with your Supabase credentials
+- Run: `npm install` (if not done already)
+- Test: `npm run inspector:stdio`
+- Verify: The inspector should connect and show available tools, confirming Supabase database connection
+>>>>>>> Stashed changes
+
+3. In the MCP Inspector interface:
+   - **Server URL**: Enter `http://localhost:3000/mcp`
+   - **Transport**: Select "HTTP"
+   - Click "Connect"
+
+### Example Interactions
+
+#### Using Resources
+
+1. In MCP Inspector, go to the "Resources" tab
+2. You'll see the "Data Categories" resource
+3. Click on `data://categories` to see your available personal data categories
+
+#### Using Tools
+
+1. In MCP Inspector, go to the "Tools" tab  
+2. Select "search-personal-data" tool
+3. Required fields:
+   - `query`: Your search term (e.g., "book", "contact", "work")
+   - `userId`: Your user UUID (e.g., "399aa002-cb10-40fc-abfe-d2656eea0199")
+4. Optional filters:
+   - `categories`: ["books"], ["contacts"], etc.
+   - `classification`: "personal", "sensitive", etc.
+   - `limit`: Number of results (default 20)
+
+## API Endpoints
+
+The server exposes the following HTTP endpoints:
+
+- `POST /mcp` - Client-to-server communication
+- `GET /mcp` - Server-to-client notifications (SSE)
+- `DELETE /mcp` - Session termination
+
+
+## Development
+
+### Scripts
+
+- `npm run dev` - Start server in development mode
+- `npm run build` - Build TypeScript to JavaScript  
+- `npm start` - Start production server
+- `npm run inspector` - Launch MCP Inspector for testing
+
+
+## Technical Details
+
+- **Framework**: Express.js with TypeScript
+- **Database**: Supabase (PostgreSQL) with Row Level Security
+- **MCP SDK**: `@modelcontextprotocol/sdk`
+- **Transport**: Streamable HTTP with session management
+- **CORS**: Configured for browser-based clients
+- **Environment**: dotenv for configuration management
 
 ## Optional: User Setup and Context
 
@@ -237,97 +377,6 @@ If you want to scope data to specific users, you can set up user authentication 
 - Some tools can scope operations to a particular user by accepting a `userId` argument (UUID from Supabase Auth). This field is optional.
 - If your client supports passing environment variables to tool calls, you may set a convenience variable like `DATABASE_USER_ID` in the client's MCP config and have your prompts/tools use it when needed.
 - Otherwise, just supply `userId` explicitly in the tool call input when you want to target a specific user.
-
-## Endpoints & Tools
-
-- Endpoints
-  - `POST/GET/DELETE /mcp` — Streamable HTTP MCP
-  - `POST/GET/DELETE /chatgpt_mcp` — ChatGPT‑oriented MCP
-
-- Tools (server)
-  - `search-personal-data`, `extract-personal-data`, `create-personal-data`, `update-personal-data`, `delete-personal-data`
-
-- Tools (ChatGPT endpoint)
-  - `search`, `fetch`
-
-## Tool Details
-
-Server tools (at `…/mcp`)
-- search-personal-data
-  - Purpose: Find records by title and content; optionally filter by categories and tags.
-  - Args: `query` (required); `categories?` string[]; `tags?` string[]; `classification?` one of `public|personal|sensitive|confidential`; `limit?` number (default 20); `userId?` string (UUID).
-  - Example:
-    ```json
-    {
-      "query": "contacts John",
-      "categories": ["contacts"],
-      "limit": 10
-    }
-    ```
-
-- extract-personal-data
-  - Purpose: List items in a single category; refine with tags.
-  - Args: `category` (required string); `tags?` string[]; `limit?` number (default 50); `offset?` number; `userId?` string (UUID); `filters?` object.
-  - Example:
-    ```json
-    {
-      "category": "contacts",
-      "tags": ["family"],
-      "limit": 20
-    }
-    ```
-
-- create-personal-data
-  - Purpose: Store a new record.
-  - Args: `category` (required string); `title` (required string); `content` (required object/JSON); `tags?` string[]; `classification?` (default `personal`); `userId?` string (UUID).
-  - Example:
-    ```json
-    {
-      "category": "documents",
-      "title": "Passport",
-      "content": { "number": "A123...", "country": "US" },
-      "tags": ["important"]
-    }
-    ```
-
-- update-personal-data
-  - Purpose: Update fields on an existing record by ID.
-  - Args: `recordId` (required string UUID); plus any fields to change: `title?`, `content?`, `tags?`, `category?`, `classification?`.
-  - Example:
-    ```json
-    {
-      "recordId": "<UUID>",
-      "title": "Emergency Contact – Updated"
-    }
-    ```
-
-- delete-personal-data
-  - Purpose: Delete one or more records; optional hard delete for permanent removal.
-  - Args: `recordIds` (required string[] of UUIDs); `hardDelete?` boolean (default false).
-  - Example:
-    ```json
-    {
-      "recordIds": ["<UUID1>", "<UUID2>"],
-      "hardDelete": false
-    }
-    ```
-
-ChatGPT endpoint tools (at `…/chatgpt_mcp`)
-- search
-  - Purpose: Return citation-friendly results for a query.
-  - Args: `query` (required string).
-  - Example:
-    ```json
-    { "query": "contacts" }
-    ```
-
-- fetch
-  - Purpose: Return full document content by ID.
-  - Args: `id` (required string UUID).
-  - Example:
-    ```json
-    { "id": "<DOCUMENT_ID>" }
-    ```
 
 ## Troubleshooting
 

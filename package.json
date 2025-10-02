@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "inspector": "npx @modelcontextprotocol/inspector --transport http --server-url http://localhost:3000/mcp",
+    "inspector:stdio": "export $(cat .env | xargs) && npx @modelcontextprotocol/inspector --config inspector-config.json --server datadam",
+    "inspector:http": "npx @modelcontextprotocol/inspector --transport http --server-url http://localhost:3000/mcp",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -16,8 +17,13 @@
   },
   "keywords": [],
   "author": "",
+<<<<<<< Updated upstream
   "license": "ISC",
+  "type": "commonjs",
+=======
+  "license": "MIT",
   "type": "module",
+>>>>>>> Stashed changes
   "bugs": {
     "url": "https://github.com/KennethLeeJE8/datadam_mcp/issues"
   },

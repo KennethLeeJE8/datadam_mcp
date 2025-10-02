@@ -11,12 +11,10 @@ async function fetchAvailableCategories() {
   try {
     const { data: categories, error } = await supabase.rpc('get_active_categories');
     if (error) {
-      console.error("Error fetching categories:", error);
-      return [];
+        return [];
     }
     return categories?.map((cat) => cat.category_name) || [];
   } catch (error) {
-    console.error("Failed to fetch categories:", error);
     return [];
   }
 }
@@ -34,7 +32,6 @@ async function initializeDatabase() {
     
     // Fetch initial categories
     availableCategories = await fetchAvailableCategories();
-    console.error("Available categories:", availableCategories);
     
     // Test the connection by fetching category stats
     const { data, error } = await supabase.rpc('get_category_stats');
@@ -43,10 +40,7 @@ async function initializeDatabase() {
       throw error;
     }
     
-    console.error(`Connected to Supabase successfully`);
-    console.error(`Database stats:`, data?.[0] || 'No data');
   } catch (error) {
-    console.error("Error connecting to database:", error);
     throw error;
   }
 }
@@ -147,7 +141,6 @@ function createMcpServer() {
           // Check if it matches any available categories
           if (availableCategories.includes(potentialCategory)) {
             categories = [potentialCategory];
-            console.error(`Auto-detected category from "my ${potentialCategory}" pattern`);
           }
         }
 
@@ -185,6 +178,7 @@ function createMcpServer() {
             : String(item.content).substring(0, 200);
           
           return `${item.title}
+   Record ID: ${item.id}
    Category: ${item.category || 'Uncategorized'}
    Classification: ${item.classification}
    Tags: ${item.tags?.join(', ') || 'None'}
@@ -289,6 +283,7 @@ function createMcpServer() {
             : String(item.content).substring(0, 200);
           
           return `${item.title}
+   Record ID: ${item.id}
    Category: ${item.category || 'Uncategorized'}
    Classification: ${item.classification}
    Tags: ${item.tags?.join(', ') || 'None'}
@@ -381,19 +376,11 @@ function createMcpServer() {
     },
     async ({ recordId, updates, conversationContext }) => {
       try {
-        console.error('Update parameters:', {
-          recordId,
-          updates: JSON.stringify(updates, null, 2),
-          conversationContext
-        });
-
         const { data: result, error } = await supabase.rpc('update_personal_data', {
           p_record_id: recordId,
           p_updates: updates,
           p_conversation_context: conversationContext || null
         });
-
-        console.error('Update result:', { result, error });
 
         if (error) {
           return {
@@ -521,11 +508,9 @@ async function main() {
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {
-  console.error('\nShutting down server...');
   process.exit(0);
 });
 
 main().catch((error) => {
-  console.error("Server error:", error);
   process.exit(1);
 });
