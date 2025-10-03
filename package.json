@@ -17,13 +17,8 @@
   },
   "keywords": [],
   "author": "",
-<<<<<<< Updated upstream
-  "license": "ISC",
-  "type": "commonjs",
-=======
   "license": "MIT",
   "type": "module",
->>>>>>> Stashed changes
   "bugs": {
     "url": "https://github.com/KennethLeeJE8/datadam_mcp/issues"
   },
