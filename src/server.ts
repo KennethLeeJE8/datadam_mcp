@@ -361,11 +361,11 @@ function createMcpServer(): McpServer {
       description: "Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.",
       inputSchema: {
         userId: z.string().optional().describe("Optional: User identifier. If not provided, creates record without user association."),
-        category: z.enum(['contacts', 'documents', 'preferences', 'basic_information', 'books', 'favorite_authors', 'interests', 'digital_products']).describe("Category of personal data to store"),
-        title: z.string().describe("Record title"),
-        content: z.record(z.any()).describe("Record content"),
+        category: z.enum(['contacts', 'basic_information', 'books', 'favorite_authors', 'interests', 'digital_products']).describe("Category of personal data to store"),
+        title: z.string().describe("Record title").describe("Title that describes the record being produced"),
+        content: z.record(z.any()).describe("Record content").describe("The content of the record being produced"),
         tags: z.array(z.string()).optional().describe("Tags for categorization (use singular forms: 'family', 'work', 'personal', etc.)"),
-        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
+        classification: z.enum(['personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
       }
     },
     async ({ userId, category, title, content, tags, classification = 'personal' }) => {

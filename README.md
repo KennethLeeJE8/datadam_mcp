@@ -199,7 +199,6 @@ MCP Client Config:
     "dataDam": {
       "command": "node",
       "args": ["path/to/server.js"],
-      "cwd": "cloned github directory",
       "env": {
         "SUPABASE_URL": "your_supabase_url",
         "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
@@ -244,14 +243,14 @@ Tips to use tools:
 
 You can add categories in the category_resgistry table and it will dynamically update in resources. 
 
-Server tools (at `…/mcp`)
+### Server tools (at `…/mcp`)
 - search-personal-data
   - Purpose: Find records by title and content; optionally filter by categories and tags.
   - Args: `query` (required); `categories?` string[]; `tags?` string[]; `classification?` one of `public|personal|sensitive|confidential`; `limit?` number (default 20); `userId?` string (UUID).
   - Example:
     ```json
     {
-      "query": "contacts John",
+      "query": "John",
       "categories": ["contacts"],
       "limit": 10
     }
