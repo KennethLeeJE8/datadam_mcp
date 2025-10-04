@@ -55,7 +55,7 @@ DataDam supports two connection methods:
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/KennethLeeJE8/datadam_mcp.git
+   git clone https://github.com/KennethLeeJE8/datadam_mcp.git && cd datadam_mcp
    ```
 
 2. Install dependencies:
@@ -63,7 +63,7 @@ DataDam supports two connection methods:
    npm install
    ```
 
-4. Build the TypeScript code:
+3. Build the TypeScript code:
    ```bash
    npm run build
    ```
@@ -72,8 +72,10 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 
 ### Prerequisites
 
-- Accounts: Supabase (required), Render (for hosting)
-- CLI: PostgreSQL client `psql`, Node.js + npm (for building before deploy if needed)
+- **Git**: Version control system - [Download Git](https://git-scm.com/downloads)
+- **Node.js + npm**: JavaScript runtime and package manager - [Download Node.js](https://nodejs.org/en/download)
+- **Accounts**: Supabase (required), Render (for hosting)
+- **CLI**: PostgreSQL client `psql` (for building before deploy if needed)
 
 ### Supabase Setup (Details)
 
@@ -86,9 +88,11 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 - Run: `psql "<transaction_pooler_string>" -f src/database/schema.sql` in sql (file: src/database/schema.sql)
 - If you don't have `psql` installed, download PostgreSQL and the CLI from the official site: [PostgreSQL Downloads](https://www.postgresql.org/download/)
 
+Alternatively, you can just grab the code in src/database/schema.sql file, paste it into the SQL Editor in Supabase console and executing it, it does the same thing. 
+
 3) You should see your Supabase table editor view populated with tables. 
 
-4) Set up environment variables:
+4) Set up environment variables by cloning the .env file:
    ```bash
    cp .env.example .env
    ```
@@ -227,14 +231,13 @@ Categories available:
 - contacts
 - books
 
-The MCP Server is designed to teach the AI to retrieve personal information it needs to answer your questions. 
+The MCP Server is designed to teach the AI to retrieve personal information it needs to answer your questions. Your AI tool should make tool calls as it needs personal context to give you a better answer.
 
 Tips to use tools:
 - Mention DataDam MCP in your prompt to let the AI tool know your want data from it
 - Using my {category_name} will trigger the AI to use DataDam
+- Ensure to use plural form for the categories, such as 'books' instead of book, 'contacts' instead of 'contact
 
-
-Your AI tool should make tool calls as it needs personal context to give you a better answer.
 
 ## Tool Details
 

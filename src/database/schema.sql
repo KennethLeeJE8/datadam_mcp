@@ -1,33 +1,15 @@
--- ============================================================================
--- Combined SQL schema for Datadam MCP
--- Source order: schema.sql → 002_mcp_functions.sql → 003_error_logging.sql → 004_category_registry.sql → 005_chatgpt_functions.sql
--- ============================================================================
-
--- >>> BEGIN schema.sql
-
 -- SUPABASE SETUP INSTRUCTIONS:
--- 
--- STEP 1: Create Test User in Supabase Dashboard
---   1. Go to Authentication > Users in your Supabase dashboard
---   2. Click "Add User"
---   3. Create user: sample@example.com / TestPassword123!
---   4. Copy the generated UUID (looks like: a1b2c3d4-e5f6-7890-abcd-ef1234567890)
 --
--- STEP 2: Update Sample Data UUIDs
---   1. Search for 'YOUR_TEST_USER_UUID_HERE' in this file (lines ~452, 467)
---   2. Replace both instances with the UUID from Step 1
---
--- STEP 3: Run this SQL script in your Supabase SQL Editor
+-- STEP 1: Run this SQL script in your Supabase SQL Editor
 --   The following are handled automatically by this script:
 --   ✅ Tables creation with constraints and indexes
 --   ✅ Row Level Security (RLS) policies
 --   ✅ RPC functions for MCP operations
 --   ✅ Triggers and helper functions
---   ✅ Sample data insertion (after UUID replacement)
+--   ✅ Sample data insertion
 --
--- STEP 4: Service Role Key
---   Make sure your SUPABASE_SERVICE_ROLE_KEY environment variable
---   is set correctly for admin operations
+-- STEP 2: Supabase URL and Service Role Key
+--   Make sure you fill out SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables
 
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -477,44 +459,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create sample data for testing
--- IMPORTANT: Replace 'YOUR_TEST_USER_UUID_HERE' with actual UUID from auth.users
--- 
--- To get a real user UUID:
--- 1. Go to Supabase Dashboard > Authentication > Users
--- 2. Click "Add User" and create: sample@example.com / TestPassword123!
--- 3. Copy the generated UUID and replace the placeholder below
-
--- Sample data creation (commented out - uncomment and replace UUIDs after creating test user)
--- First create a sample profile
--- INSERT INTO profiles (
---   user_id,
---   username,
---   full_name,
---   metadata
--- ) VALUES (
---   'YOUR_TEST_USER_UUID_HERE'::UUID, -- Replace with real UUID from auth.users
---   'sample_user',
---   'Sample User',
---   '{"created_by": "schema_script", "source": "sample_data"}'
--- ) ON CONFLICT (username) DO NOTHING;
-
--- Then create sample personal data linked to that profile
--- INSERT INTO personal_data (
---   user_id,
---   category,
---   title,
---   content,
---   tags,
---   classification
--- ) VALUES (
---   'YOUR_TEST_USER_UUID_HERE'::UUID, -- Replace with same UUID
---   'contacts',
---   'Emergency Contact',
---   '{"name": "John Doe", "phone": "+1-555-0123", "relationship": "Emergency Contact"}',
---   ARRAY['emergency', 'contact'],
---   'personal'
--- ) ON CONFLICT DO NOTHING;
 
 -- Create function to get category statistics (replaced data_type with categories)
 CREATE OR REPLACE FUNCTION get_category_distribution_stats()
@@ -1200,22 +1144,6 @@ INSERT INTO category_registry (
     ARRAY['contacts', 'friends', 'family', 'colleagues', 'people', 'relationships', 'connections', 'network'],
     'Query when user needs contact information, asks about relationships, or discusses people in their network',
     ARRAY['Show my contacts', 'Who do I know?', 'Find contact information', 'My professional network']
-  ),
-  (
-    'documents',
-    'Documents & Files',
-    'Important documents, files, and written materials',
-    ARRAY['documents', 'files', 'papers', 'records', 'notes', 'written materials', 'important docs'],
-    'Query when user asks about stored documents, file organization, or specific written materials',
-    ARRAY['What documents do I have?', 'Show my important files', 'Find my notes', 'My stored records']
-  ),
-  (
-    'preferences',
-    'Preferences & Settings',
-    'User preferences, settings, and configuration choices',
-    ARRAY['preferences', 'settings', 'configuration', 'options', 'choices', 'customization'],
-    'Query when discussing user preferences, configuration options, or personalization settings',
-    ARRAY['What are my preferences?', 'Show my settings', 'How is this configured?', 'My customization choices']
   )
 ON CONFLICT (category_name) DO UPDATE SET
   display_name = EXCLUDED.display_name,
@@ -1281,9 +1209,6 @@ BEGIN
   FROM category_registry;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Note: data_type column migration was removed since it doesn't exist in the current schema
--- If migrating from an old schema, manually set categories for existing records
 
 -- Manual sync of category counts for existing data
 WITH category_counts AS (
@@ -1459,4 +1384,20 @@ ON personal_data USING GIN (tags);
 -- Note: pg_trgm extension removed to avoid dependency issues
 -- If you want similarity scoring, enable it manually: CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- <<< END 005_chatgpt_functions.sql
+
+-- Test data entry for MCP (Model Context Protocol)
+INSERT INTO personal_data (
+  user_id,
+  category,
+  title,
+  content,
+  tags,
+  classification
+) VALUES (
+  NULL, -- No user ID as requested
+  'interests',
+  'MCP (Model Context Protocol)',
+  '{"description": "A protocol for enabling AI assistants to securely access external tools and data sources", "type": "technology", "domain": "artificial intelligence", "use_cases": ["data access", "tool integration", "secure AI interactions"], "related_concepts": ["AI agents", "tool calling", "protocol design"]}',
+  ARRAY['technology', 'protocol', 'ai', 'mcp'],
+  'personal'
+) ON CONFLICT DO NOTHING;

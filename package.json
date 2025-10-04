@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "inspector:stdio": "export $(cat .env | xargs) && npx @modelcontextprotocol/inspector --config inspector-config.json --server datadam",
+    "inspector:stdio": "dotenv -e .env -- npx @modelcontextprotocol/inspector --config inspector-config.json --server datadam",
     "inspector:http": "npx @modelcontextprotocol/inspector --transport http --server-url http://localhost:3000/mcp",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -37,7 +37,8 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "typescript": "^5.9.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "dotenv-cli": "^7.3.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/inspector": "^0.16.7",
