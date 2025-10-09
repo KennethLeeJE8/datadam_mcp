@@ -8,9 +8,13 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 - How it works
   - Your AI tool will invoke the neccessary tools in your console/command line upon needing personal information.
+  - It will also fill out the parameters of the call itself
   - Categories group related records (e.g., `books`, `contacts`, `basic_information`). All datapoints are assigned to a category.
-  - Tags are optional 
+  - Tags are used as an optional refinement to narrow down results within each category
   - More information on how each tool works can be found [here](#tool-details)
+
+- How to use it
+  - 
 
 - Data model
   - Categories are maintained in the database and surfaced via the `data://categories` resource, which are static at the moment. 
@@ -79,16 +83,30 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 
 ### Supabase Setup (Details)
 
-1) Create a user (Auth)
-- Supabase Dashboard → Authentication → Users → Add user
-- Copy the user UUID for later (optional user scoping)
+1) Create a Supabase account
+- Go to [Supabase Sign Up](https://supabase.com/dashboard/sign-up) to create your account
+- **Important**: Remember your password - you'll need it for the database connection later
+- Create a new project and wait for it to finish setting up
 
-2) Load schema with `psql`
-- Supabase → Project settings → Database → Connection strings → choose Transaction Pooler (`psql`)
-- Run: `psql "<transaction_pooler_string>" -f src/database/schema.sql` in sql (file: src/database/schema.sql)
-- If you don't have `psql` installed, download PostgreSQL and the CLI from the official site: [PostgreSQL Downloads](https://www.postgresql.org/download/)
+2) Load the database schema (choose one method):
 
-Alternatively, you can just grab the code in src/database/schema.sql file, paste it into the SQL Editor in Supabase console and executing it, it does the same thing. 
+**Option 2a) Using psql command line:**
+- Download PostgreSQL and the CLI from: [PostgreSQL Downloads](https://www.postgresql.org/download/)
+- Supabase Dashboard → Project Settings → Database → Connection strings → Transaction pooler
+- Copy the connection string (looks like this):
+```
+postgres://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+```
+- Run this command with your connection string:
+```bash
+psql "your_connection_string_here" -f src/database/schema.sql
+```
+
+**Option 2b) Using Supabase SQL Editor:**
+- Copy the entire contents of [src/database/schema.sql](./src/database/schema.sql) 
+- Supabase Dashboard → SQL Editor → New query
+- Paste the copied schema code into the editor
+- Click "Run" to execute the schema
 
 3) You should see your Supabase table editor view populated with tables. 
 
@@ -97,8 +115,12 @@ Alternatively, you can just grab the code in src/database/schema.sql file, paste
    cp .env.example .env
    ```
    Edit `.env` and add your Supabase credentials:
-   - `SUPABASE_URL` - Your Supabase project URL
-   - `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
+   
+   **To find your SUPABASE_URL:**
+   - Supabase Dashboard → Project Settings → API → Project URL
+   
+   **To find your SUPABASE_SERVICE_ROLE_KEY:**
+   - Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
 
 ### Local Testing
 
@@ -134,9 +156,9 @@ Feel free to use any hosting platfrom, this is personal preference.
 
 Environment (Render dashboard)
 - `SUPABASE_URL`
-Find it in Project Settings → Data API → Project URL. 
+  - Supabase Dashboard → Project Settings → API → Project URL
 - `SUPABASE_SERVICE_ROLE_KEY`
-Find it in Project Settings → API Keys → service_role key.  
+  - Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
 - `NODE_ENV=production`
 
 ### Verify HTTP Connections
@@ -234,7 +256,7 @@ The MCP Server is designed to teach the AI to retrieve personal information it n
 
 Tips to use tools:
 - Mention DataDam MCP in your prompt to let the AI tool know your want data from it
-- Using my {category_name} will trigger the AI to use DataDam
+- Using "my {category_name}" in your query will trigger the AI to use DataDam
 - Ensure to use plural form for the categories, such as 'books' instead of book, 'contacts' instead of 'contact
 
 
@@ -303,7 +325,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-ChatGPT endpoint tools (at `…/chatgpt_mcp`)
+### ChatGPT endpoint tools (at `…/chatgpt_mcp`)
 - search
   - Purpose: Return citation-friendly results for a query.
   - Args: `query` (required string).
