@@ -53,46 +53,48 @@ DataDam supports two connection methods:
 - **Environment**: Local environment variables or passed via client config
 - **Protocol**: MCP over stdio transport with direct process communication
 
+## Prerequisites
+
+- **Git**: Version control system - [Download Git](https://git-scm.com/downloads)
+- **Node.js + npm**: JavaScript runtime and package manager - [Download Node.js](https://nodejs.org/en/download)
+- **Accounts**: Supabase (required), Render (for hosting)
+- **CLI**: PostgreSQL client `psql` (for building before deploy if needed)
+  - **Mac users**: Install via Homebrew: `brew install postgresql`
+
 ## Quickstart
 
-### Installation
+### **Installation**
 
-1. Clone this repository:
+**1.** Clone this repository:
    ```bash
    git clone https://github.com/KennethLeeJE8/datadam_mcp.git && cd datadam_mcp
    ```
 
-2. Install dependencies:
+**2.** Install dependencies:
    ```bash
    npm install
    ```
 
-3. Build the TypeScript code:
+**3.** Build the TypeScript code:
    ```bash
    npm run build
    ```
 
 Happy to help if you have any problems w the setup! Shoot me a message or send me an email at kennethleeje8@gmail.com :)
 
-### Prerequisites
+### **Supabase Setup**
 
-- **Git**: Version control system - [Download Git](https://git-scm.com/downloads)
-- **Node.js + npm**: JavaScript runtime and package manager - [Download Node.js](https://nodejs.org/en/download)
-- **Accounts**: Supabase (required), Render (for hosting)
-- **CLI**: PostgreSQL client `psql` (for building before deploy if needed)
-
-### Supabase Setup (Details)
-
-1) Create a Supabase account
+**1.** Create a Supabase account
 - Go to [Supabase Sign Up](https://supabase.com/dashboard/sign-up) to create your account
 - **Important**: Remember your password - you'll need it for the database connection later
 - Create a new project and wait for it to finish setting up
 
-2) Load the database schema (choose one method):
+**2.** Load the database schema (choose one method):
 
-**Option 2a) Using psql command line:**
+**Option 2a)** Using psql command line:
 - Download PostgreSQL and the CLI from: [PostgreSQL Downloads](https://www.postgresql.org/download/)
-- Supabase Dashboard → Project Settings → Database → Connection strings → Transaction pooler
+
+- **Note**: Use the **Connect** button at the top of the page to get your transaction pooler string
 - Copy the connection string (looks like this):
 ```
 postgres://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:6543/postgres
@@ -102,15 +104,15 @@ postgres://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:65
 psql "your_connection_string_here" -f src/database/schema.sql
 ```
 
-**Option 2b) Using Supabase SQL Editor:**
+**Option 2b)** Using Supabase SQL Editor:
 - Copy the entire contents of [src/database/schema.sql](./src/database/schema.sql) 
 - Supabase Dashboard → SQL Editor → New query
 - Paste the copied schema code into the editor
 - Click "Run" to execute the schema
 
-3) You should see your Supabase table editor view populated with tables. 
+**3.** You should see your Supabase table editor view populated with tables. 
 
-4) Set up environment variables by cloning the .env file:
+**4.** Set up environment variables by cloning the .env file:
    ```bash
    cp .env.example .env
    ```
@@ -122,51 +124,60 @@ psql "your_connection_string_here" -f src/database/schema.sql
    **To find your SUPABASE_SERVICE_ROLE_KEY:**
    - Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
 
-### Local Testing
-
-- `npm run dev` - Start server in development mode
-- `npm run build` - Build TypeScript to JavaScript  
-- `npm start` - Start production server
-
-### Verify Stdio Connections
-- Test: `npm run inspector:stdio`
+### **Local Testing**
+- **Test**: 
+  ```bash
+  npm run inspector:stdio
+  ```
    - **Transport**: Select "stdio"
    - **Arguments**: Enter "server.js"
    - Click "Connect"
-- Verify: The inspector should connect and show available tools, confirming Supabase database connection
+- **Verify**: The inspector should connect and show available tools, confirming Supabase database connection
+- **Test**: Go to the Tools tab and click "List Tools" → find "extract_personal_data_tool" → enter "interests" for categories → click "Run Tool" to verify database connectivity
+- You should see a datapoint on "MCP (Model Context Protocol)"
 
-### Verify HTTP Connections
-- Test: `npm run inspector:http`
-   - **Server URL**: Enter `http://localhost:3000/mcp`
+### **Render Deployment (Only for Streamable HTTP Server)**
+
+Feel free to use any hosting platform, this is personal preference.
+
+**1.** Go to [Render Dashboard](https://dashboard.render.com) and click **New > Web Service**
+
+**2.** Choose **"Build and deploy from a Git repository"** and click **Next**
+
+**3.** Connect to the public GitHub repository:
+   - Repository URL: `https://github.com/KennethLeeJE8/datadam_mcp.git`
+   - Branch: `main`
+
+**4.** The `render.yaml` file automatically configures most settings (name, runtime, build/start commands, root directory, etc.)
+
+**5.** Fill in the environment variables in the **Advanced** section:
+   - `SUPABASE_URL` - Get from: Supabase Dashboard → Project Settings → API → Project URL
+   - `SUPABASE_SERVICE_ROLE_KEY` - Get from: Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
+
+**6.** Click **Create Web Service** to deploy
+
+**Notes:**
+- Health check path is automatically set to `/health` via render.yaml
+- Free tier can hit limits; use Standard tier for reliable uptime
+
+### **Verify HTTP Connections**
+- Health endpoint: `curl http://{render_url}/health`
+
+### **Verify HTTP Tools**
+- **Test**: 
+Go back to the Command Line and run:
+  ```bash
+  npm run inspector:http
+  ```
+   - **Server URL**: Enter `http://<YOUR_RENDER_URL>/mcp`
    - **Transport**: Select "HTTP"
    - Click "Connect"
-- Verify: The inspector should connect and show available tools, confirming Supabase database connection
-
-
-### Render Deployment (Only for Streamable HTTP Server)
-
-Feel free to use any hosting platfrom, this is personal preference. 
-
-- Repo includes `render.yaml` with sane defaults (render.yaml)
-- Service type: Web Service
-- Build command: `npm install && npm run build`
-- Start command: `npm start`
-- Health check path: `/health`
-- Plan tips: The free tier is fine for testing but can crash or hit limits; use a higher tier (e.g., Standard) for good uptime
-
-Environment (Render dashboard)
-- `SUPABASE_URL`
-  - Supabase Dashboard → Project Settings → API → Project URL
-- `SUPABASE_SERVICE_ROLE_KEY`
-  - Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
-- `NODE_ENV=production`
-
-### Verify HTTP Connections
-- Health endpoint: `curl http://{render_url}/health`
+- **Verify**: The inspector should connect and show available tools, confirming Supabase database connection
+- **Test**: Go to the Tools tab and click "List Tools" → find "extract_personal_data_tool" → enter "interests" for categories → click "Run Tool" to verify database connectivity
 
 ## Client Configuration Examples
 
-### HTTP Connections
+### **HTTP Connections**
 
 For hosted deployments using streamable HTTP:
 
@@ -206,7 +217,7 @@ Generic MCP Clients
   - Type: `http`
   - URL: `https://<service>.onrender.com/mcp`
 
-### Stdio Connections
+### **Stdio Connections**
 
 For local development using stdio transport:
 
@@ -229,10 +240,19 @@ MCP Client Config:
   }
 }
 ```
+⚠️ **Important**: Update the path to `server.js` and replace environment variables with your actual Supabase credentials
 
-Claude Desktop
+**Claude Desktop**
 - Open Claude Desktop → Settings → Developer → Edit Config
 - Add the MCP server configuration
+
+**Claude Code**
+- Open your `.claude.json` file in your IDE (use search tool to search for "mcp" if you can't find it)
+- Add the MCP server configuration under mcpServers
+
+**Config file locations:**
+- **Codex**: `~/.codex/config.toml` (see [docs](https://github.com/openai/codex/blob/main/docs/config.md))
+- **Other coding agents**: Similar JSON format in their respective config files
 
 Works w all the coding agents
 

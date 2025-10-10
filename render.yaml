@@ -2,8 +2,10 @@ services:
   - type: web
     name: datadam-mcp
     runtime: node
-    region: ohio # Deployment region set to Ohio
-    plan: free # Start with free tier, can upgrade later
+    env: node  # THIS WAS MISSING - critical for Node.js apps
+    region: ohio
+    plan: free
+    rootDir: src
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
@@ -12,7 +14,7 @@ services:
         value: production
       - key: NODE_OPTIONS
         value: --max-old-space-size=512
-    # Add these in Render dashboard for security:
-    # - SUPABASE_URL
-    # - SUPABASE_SERVICE_ROLE_KEY
-    # - DATABASE_USER_ID
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
