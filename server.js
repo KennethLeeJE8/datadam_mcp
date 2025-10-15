@@ -47,8 +47,9 @@ async function initializeDatabase() {
 
 function createMcpServer() {
   const server = new McpServer({
-    name: "personal-data-mcp-server",
-    version: "1.0.0"
+    name: "datadam",
+    version: "1.0.0",
+    description: "Personal knowledge database that automatically retrieves stored personal context when needed for personalized responses. Captures and stores personal information when user shares details. Triggers on: 'my [anything]', personal questions, preference queries, or when personal context would improve responses."
   });
 
   // Register the categories list resource
@@ -115,17 +116,31 @@ function createMcpServer() {
   server.registerTool(
     "search-personal-data",
     {
-      title: "Search Personal Data",
-      description: "Search through personal data by title and content for a specific user. IMPORTANT: This tool should be triggered when users mention 'my' followed by any category name (e.g., 'my books', 'my contacts', 'my preferences', 'my documents', 'my favorite authors', etc.) as this indicates they want a personalized response based on their stored data. Also trigger for queries about personal information, preferences, or any stored user data.",
+      title: "Search Personal Data by Keyword",
+      description: `Search for SPECIFIC datapoints, names, or details across all personal data using keyword matching. Use when looking for a specific person, thing, or piece of information (e.g., "find John's email", "my passport number", "Docker info"). Returns ranked results with context snippets.
+
+WHEN TO USE:
+- Searching for specific person: "find John", "who is Sarah"
+- Looking for specific datapoint: "my passport number", "email address", "phone number"
+- Specific details mentioned: proper nouns, concrete terms
+- Cross-category keyword search needed
+
+WHEN NOT TO USE:
+- Browsing entire category → use extract-personal-data instead
+- "All my [category]" or "list my [category]" → use extract-personal-data instead
+- No specific search term, just browsing tags → use extract-personal-data instead
+
+TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is", "lookup", "get [specific info]", "tell me about [specific thing]"`,
       inputSchema: {
-        query: z.string().describe("Search query to find in titles and content. For 'my {category}' queries, extract the relevant search term or use the category name itself"),
-        userId: z.string().optional().describe("Optional: User ID (UUID) to search data for. If not provided, searches across all users."),
-        categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts'). When user says 'my {category}', include that category here"),
-        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Filter by classification level"),
-        limit: z.number().min(1).max(100).default(20).describe("Maximum number of results to return")
+        query: z.string().describe("Specific search term, name, or datapoint to find. Must be concrete reference. Examples: 'John email', 'passport', 'TypeScript', 'Matt Ridley', 'Boston address'"),
+        categories: z.array(z.string()).optional().describe("Optional: Narrow search to specific categories if known. Examples: ['contacts'], ['books', 'documents']. Leave empty to search all."),
+        tags: z.array(z.string()).optional().describe("Optional: Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']"),
+        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Optional: Filter by data sensitivity level"),
+        limit: z.number().min(1).max(100).default(20).describe("Max results. Default: 20, Max: 100"),
+        userId: z.string().optional().describe("Optional: User UUID.")
       }
     },
-    async ({ query, userId, categories, classification, limit = 20 }) => {
+    async ({ query, categories, tags, classification, limit = 20, userId }) => {
       try {
         // Remove surrounding quotes if present
         const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
@@ -148,7 +163,7 @@ function createMcpServer() {
           p_user_id: userId || null,
           p_search_text: cleanQuery,
           p_categories: (categories && categories.length > 0) ? categories : null,
-          p_tags: null,
+          p_tags: (tags && tags.length > 0) ? tags : null,
           p_classification: classification || null,
           p_limit: limit,
           p_offset: 0
@@ -208,25 +223,45 @@ function createMcpServer() {
   const getCategorySchema = () => {
     if (availableCategories.length > 0) {
       return z.enum(availableCategories).describe(
-        `Select a category to filter by. Available categories: ${availableCategories.join(', ')}`
+        `Category to filter by. Available: ${availableCategories.join(', ')}`
       );
     } else {
-      return z.string().describe("Category to filter by (categories are loaded dynamically from database)");
+      // Fallback to fixed set when database not loaded
+      return z.enum([
+        "contacts", "books", "favorite_authors", "interests",
+        "basic_information", "digital_products", "documents", "preferences"
+      ]).describe("Category to filter by");
     }
   };
-  
+
   server.registerTool(
     "extract-personal-data",
     {
-      title: "Extract Personal Data by Category",
-      description: "Extract groups of similar entries by category from a specific user profile or all profiles. TRIGGER: Use this tool when users ask for 'my {category}' (e.g., 'my books', 'my contacts') to retrieve all items in that category. A single category is mandatory for broad collection retrieval. Tags are optional and used for further filtering within the category (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). This complements the search tool for category-specific retrieval.",
+      title: "List Items by Category/Tags",
+      description: `Retrieve items by CATEGORY or TAGS when browsing/listing without specific search terms. Use for "show me all my X" requests or tag-based filtering. Returns complete records.
+
+WHEN TO USE:
+- Listing entire category: "all my contacts", "my books"
+- Browsing by tag: "family contacts", "work items"
+- "Show me my [category]" requests
+- Exploring what's in a category
+- Tag-based filtering within category
+
+WHEN NOT TO USE:
+- Searching for specific person/thing → use search-personal-data
+- Looking for specific datapoint by name → use search-personal-data
+- Need keyword matching → use search-personal-data
+
+TRIGGER KEYWORDS: "all my [category]", "my [category]", "list my", "show me my", "what [category] do I have", "[tag] [category]", "browse my"
+
+ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences`,
       inputSchema: {
         category: getCategorySchema(),
-        tags: z.array(z.string()).optional().describe("Optional: Multiple tags to filter entries within the category. Tags are used for further filtering (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). Use singular forms for tags."),
-        userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
-        filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
-        limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
-        offset: z.number().min(0).default(0).describe("Pagination offset")
+        tags: z.array(z.string()).optional().describe("Optional: Filter within category by tags. Singular forms only. Examples: ['family'], ['work'], ['sci-fi']"),
+        limit: z.number().min(1).max(100).default(50).describe("Results per page. Default: 50, Max: 100"),
+        offset: z.number().min(0).default(0).describe("Pagination offset"),
+        userId: z.string().optional().describe("Optional: User UUID."),
+        filters: z.record(z.any()).optional().describe("Optional: Additional field-level filters")
       }
     },
     async ({ category, tags, userId, filters, limit = 50, offset = 0 }) => {
@@ -313,18 +348,40 @@ function createMcpServer() {
   server.registerTool(
     "create-personal-data",
     {
-      title: "Create Personal Data",
-      description: "Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.",
+      title: "Store New Personal Data",
+      description: `Capture and store personal data when user shares information. AGGRESSIVE CAPTURE MODE: Trigger when user mentions personal details, even without explicit "save" command.
+
+EXPLICIT TRIGGERS (100% confidence):
+- "save this", "remember that", "store my", "add to my", "keep this", "note that", "record this"
+
+IMPLICIT TRIGGERS (80%+ confidence - still capture):
+- "my email is...", "I live in...", "I work at...", "my favorite [X] is...", "I like...", "I prefer..."
+- "I'm learning...", "I use [tool]...", "[person] is my [relationship]", "I'm a [role]"
+
+CONTEXTUAL TRIGGERS (60%+ confidence):
+- User answers questions with personal details
+- User introduces someone with contact info
+- User mentions tools/technologies they use
+
+CATEGORY SELECTION (must use one of the allowed categories):
+- Email/phone/person → contacts
+- Book/reading → books or favorite_authors
+- Tool/tech/app → digital_products
+- Hobby/interest/learning → interests
+- Location/background → basic_information
+- Preference/choice → preferences
+
+ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences`,
       inputSchema: {
-        userId: z.string().optional().describe("Optional: User identifier. If not provided, creates record without user association."),
-        category: z.enum(['contacts', 'basic_information', 'books', 'favorite_authors', 'interests', 'digital_products']).describe("Category of personal data to store"),
-        title: z.string().describe("Record title").describe("Title that describes the record being produced"),
-        content: z.record(z.any()).describe("Record content").describe("The content of the record being produced"),
-        tags: z.array(z.string()).optional().describe("Tags for categorization (use singular forms: 'family', 'work', 'personal', etc.)"),
-        classification: z.enum(['personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
+        category: getCategorySchema(),
+        title: z.string().describe("Descriptive title. Examples: 'John Smith - Work Contact', 'Favorite Author - Matt Ridley', 'Current Location', 'Learning Docker'"),
+        content: z.record(z.any()).describe("Structured attributes/characteristics as JSON key-value pairs tied to the title. Keep concise - attributes only, NOT explanations or long lists. Examples: {email: 'x@y.com', phone: '555-1234'}, {author: 'Matt Ridley', genre: 'Science'}, {location: 'Boston, MA', state: 'Massachusetts'}"),
+        tags: z.array(z.string()).optional().describe("Optional tags. Singular forms: 'family', 'work', 'favorite', 'urgent', 'learning' (NOT plural)"),
+        classification: z.enum(['personal', 'sensitive', 'confidential']).default('personal').describe("Sensitivity level. Default: 'personal'. Use 'sensitive' for private info, 'confidential' for highly sensitive"),
+        userId: z.string().optional().describe("Optional: User UUID.")
       }
     },
-    async ({ userId, category, title, content, tags, classification = 'personal' }) => {
+    async ({ category, title, content, tags, classification = 'personal', userId }) => {
       try {
         const { data: result, error } = await supabase.rpc('create_personal_data', {
           p_user_id: userId || null,
@@ -366,12 +423,24 @@ function createMcpServer() {
   server.registerTool(
     "update-personal-data",
     {
-      title: "Update Personal Data",
-      description: "Automatically update existing personal data records when new or updated information is mentioned. Requires the UUID of the specific data record to identify which item to update. This tool should be called whenever the user provides ANY updated information about previously stored data.",
+      title: "Update Existing Personal Data",
+      description: `Modify existing personal data records. Requires record UUID from previous search/extract. Use when user wants to change or correct information.
+
+TRIGGER KEYWORDS: "update [X]", "change [X]", "modify [X]", "edit [X]", "correct [X]", "fix [X]", "revise [X]", "[X] changed to [Y]", "new [X] is [Y]", "actually it's [X]"
+
+WORKFLOW:
+1. User requests update
+2. If UUID unknown: search/extract to find record first
+3. Apply updates to identified record
+4. Confirm (don't show UUID to user)
+
+EXAMPLES:
+- "Update John's email to new@email.com" → search for John → update with UUID
+- "Change my location to Boston" → extract basic_information → find location → update`,
       inputSchema: {
-        recordId: z.string().describe("Record identifier (UUID) to update"),
-        updates: z.record(z.any()).describe("Fields to update"),
-        conversationContext: z.string().optional().describe("The conversation context from which to extract updates (for passive mode)")
+        recordId: z.string().describe("UUID of record to update. Obtain from search-personal-data or extract-personal-data first. Never show to user."),
+        updates: z.record(z.any()).describe("Fields to update. Only include changed fields. Examples: {content: {email: 'new@email.com'}}, {tags: ['family', 'urgent']}"),
+        conversationContext: z.string().optional().describe("Optional: Conversation context for extracting updates")
       }
     },
     async ({ recordId, updates, conversationContext }) => {
@@ -423,11 +492,26 @@ function createMcpServer() {
   server.registerTool(
     "delete-personal-data",
     {
-      title: "Delete Personal Data",
-      description: "Delete personal data records. Requires the UUID(s) of the specific data record(s) to identify which items to delete. Use with caution - supports both soft and hard deletion for GDPR compliance.",
+      title: "Delete Personal Data Records",
+      description: `Remove personal data records. Requires record UUID(s) from previous search/extract. Use when user explicitly wants to delete information.
+
+TRIGGER KEYWORDS: "delete [X]", "remove [X]", "erase [X]", "forget [X]", "get rid of [X]", "clear [X]", "I don't want [X] anymore"
+
+DELETION TYPES:
+- Soft Delete (default): Marks as deleted, recoverable. Use for most cases.
+- Hard Delete: Permanent removal. Use ONLY for GDPR "right to be forgotten" requests.
+
+WORKFLOW:
+1. User requests deletion
+2. If UUID unknown: search/extract to find record(s) first
+3. Confirm if bulk or hard delete
+4. Delete with appropriate type
+5. Confirm (don't show UUIDs)
+
+SAFETY: Always confirm before bulk deletes (3+ records) or hard deletes. Default to soft delete unless GDPR request.`,
       inputSchema: {
-        recordIds: z.array(z.string()).min(1).describe("Record identifiers (UUIDs) to delete"),
-        hardDelete: z.boolean().default(false).describe("Permanent deletion for GDPR compliance")
+        recordIds: z.array(z.string()).min(1).describe("Array of record UUIDs to delete. Obtain from search/extract first. Examples: ['uuid1'], ['uuid1', 'uuid2']. Never show to user."),
+        hardDelete: z.boolean().default(false).describe("Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance. WARNING: Cannot be undone.")
       }
     },
     async ({ recordIds, hardDelete = false }) => {
