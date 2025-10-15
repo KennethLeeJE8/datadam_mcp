@@ -8,6 +8,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
+import { generateUsageGuideHtml } from "./usageGuide.js";
 
 // Load environment variables
 dotenv.config();
@@ -804,11 +805,22 @@ async function main() {
 
   // Health check endpoint for Render
   app.get('/health', (req: express.Request, res: express.Response) => {
-    res.status(200).json({ 
+    res.status(200).json({
       status: 'healthy',
       service: 'MCP Personal Data Server',
       timestamp: new Date().toISOString()
     });
+  });
+
+  // Root endpoint - Usage Guide HTML
+  app.get('/', async (req: express.Request, res: express.Response) => {
+    try {
+      const html = await generateUsageGuideHtml(supabase);
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    } catch (error) {
+      res.status(500).send('Error loading usage guide');
+    }
   });
 
   // Map to store transports by session ID
