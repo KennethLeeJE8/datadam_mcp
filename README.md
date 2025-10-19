@@ -55,6 +55,7 @@ DataDam supports two connection methods:
 
 ## Prerequisites
 
+- **Homebrew**: Package Manager for MacOS and Linux - [Homebrew](https://brew.sh/)
 - **Git**: Version control system - [Download Git](https://git-scm.com/downloads)
 - **Node.js + npm**: JavaScript runtime and package manager - [Download Node.js](https://nodejs.org/en/download)
 - **Accounts**: Supabase (required), Render (for hosting)
@@ -89,9 +90,15 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 - **Important**: Remember your password - you'll need it for the database connection later
 - Create a new project and wait for it to finish setting up
 
-**2.** Load the database schema (choose one method):
+**2.** Load the database schema (choose preferred option):
 
-**Option 2a)** Using psql command line:
+**Option 2a)** Using Supabase SQL Editor:
+- Copy the entire contents of [src/database/schema.sql](./src/database/schema.sql) 
+- Supabase Dashboard → SQL Editor → New query
+- Paste the copied schema code into the editor
+- Click "Run" to execute the schema
+
+**Option 2b)** Using psql command line:
 - Download PostgreSQL and the CLI from: [PostgreSQL Downloads](https://www.postgresql.org/download/)
 
 - **Note**: Use the **Connect** button at the top of the page to get your transaction pooler string
@@ -104,37 +111,48 @@ postgres://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:65
 psql "your_connection_string_here" -f src/database/schema.sql
 ```
 
-**Option 2b)** Using Supabase SQL Editor:
-- Copy the entire contents of [src/database/schema.sql](./src/database/schema.sql) 
-- Supabase Dashboard → SQL Editor → New query
-- Paste the copied schema code into the editor
-- Click "Run" to execute the schema
+**3.** You should see your Supabase table editor view populated with tables.
 
-**3.** You should see your Supabase table editor view populated with tables. 
+✅ **Supabase setup is complete!** Your database is ready to use.
 
-**4.** Set up environment variables by cloning the .env file:
+### **Choose Your Connection Type**
+
+Select the connection method that fits your use case:
+
+- **Option A: Stdio (Local Development)**
+  - Best for: Local development, single-client setups, desktop AI applications
+  - Next step: Continue to [Local Testing](#local-testing) section below
+
+- **Option B: HTTP Streamable (Hosted Deployment)**
+  - Best for: Hosted deployments, multiple clients, web-based AI tools
+  - Next step: Skip to [Render Deployment](#render-deployment-only-for-streamable-http-server) section
+
+### **Local Testing**
+
+**1.** Set up environment variables by cloning the .env file:
    ```bash
    cp .env.example .env
    ```
    Edit `.env` and add your Supabase credentials:
-   
+
    **To find your SUPABASE_URL:**
    - Supabase Dashboard → Project Settings → API → Project URL
-   
+
    **To find your SUPABASE_SERVICE_ROLE_KEY:**
    - Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
 
-### **Local Testing**
-- **Test**: 
-  ```bash
-  npm run inspector:stdio
-  ```
+**2.** Test the connection with the MCP Inspector:
+   ```bash
+   npm run inspector:stdio
+   ```
    - **Transport**: Select "stdio"
    - **Arguments**: Enter "server.js"
    - Click "Connect"
-- **Verify**: The inspector should connect and show available tools, confirming Supabase database connection
-- **Test**: Go to the Tools tab and click "List Tools" → find "extract_personal_data_tool" → enter "interests" for categories → click "Run Tool" to verify database connectivity
-- You should see a datapoint on "MCP (Model Context Protocol)"
+
+**3.** Verify the setup:
+   - **Verify**: The inspector should connect and show available tools, confirming Supabase database connection
+   - **Test**: Go to the Tools tab and click "List Tools" → find "extract_personal_data_tool" → enter "interests" for categories → click "Run Tool" to verify database connectivity
+   - You should see a datapoint on "MCP (Model Context Protocol)"
 
 ### **Render Deployment (Only for Streamable HTTP Server)**
 

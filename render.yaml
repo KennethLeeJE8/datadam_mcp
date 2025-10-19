@@ -2,10 +2,8 @@ services:
   - type: web
     name: datadam-mcp
     runtime: node
-    env: node  # THIS WAS MISSING - critical for Node.js apps
-    region: ohio
+    region: oregon
     plan: free
-    rootDir: src
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
