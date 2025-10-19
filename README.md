@@ -13,9 +13,6 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
   - Tags are used as an optional refinement to narrow down results within each category
   - More information on how each tool works can be found [here](#tool-details)
 
-- How to use it
-  - 
-
 - Data model
   - Categories are maintained in the database and surfaced via the `data://categories` resource, which are static at the moment. 
   - Filtering order: choose a category first, then use `tags` to further narrow results within that category (tags are optional refinements, not replacements).
@@ -59,8 +56,6 @@ DataDam supports two connection methods:
 - **Git**: Version control system - [Download Git](https://git-scm.com/downloads)
 - **Node.js + npm**: JavaScript runtime and package manager - [Download Node.js](https://nodejs.org/en/download)
 - **Accounts**: Supabase (required), Render (for hosting)
-- **CLI**: PostgreSQL client `psql` (for building before deploy if needed)
-  - **Mac users**: Install via Homebrew: `brew install postgresql`
 
 ## Quickstart
 
@@ -98,33 +93,20 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 - Paste the copied schema code into the editor
 - Click "Run" to execute the schema
 
-**Option 2b)** Using psql command line:
-- Download PostgreSQL and the CLI from: [PostgreSQL Downloads](https://www.postgresql.org/download/)
-
-- **Note**: Use the **Connect** button at the top of the page to get your transaction pooler string
-- Copy the connection string (looks like this):
-```
-postgres://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:6543/postgres
-```
-- Run this command with your connection string:
-```bash
-psql "your_connection_string_here" -f src/database/schema.sql
-```
-
-**3.** You should see your Supabase table editor view populated with tables.
+**3.** You should see your Supabase table editor view populated with tables in "Table Editor".
 
 ✅ **Supabase setup is complete!** Your database is ready to use.
 
 ### **Choose Your Connection Type**
 
-Select the connection method that fits your use case:
+Select the connection method based on your AI tool:
 
-- **Option A: Stdio (Local Development)**
-  - Best for: Local development, single-client setups, desktop AI applications
+- **Option A: Stdio (Standard Input/Output)**
+  - Use for: Coding agents (Cursor, Windsurf, etc.), Claude Desktop (Free tier)
   - Next step: Continue to [Local Testing](#local-testing) section below
 
-- **Option B: HTTP Streamable (Hosted Deployment)**
-  - Best for: Hosted deployments, multiple clients, web-based AI tools
+- **Option B: HTTP Streamable**
+  - Use for: ChatGPT Plus or higher, Claude Pro or higher
   - Next step: Skip to [Render Deployment](#render-deployment-only-for-streamable-http-server) section
 
 ### **Local Testing**
@@ -136,10 +118,10 @@ Select the connection method that fits your use case:
    Edit `.env` and add your Supabase credentials:
 
    **To find your SUPABASE_URL:**
-   - Supabase Dashboard → Project Settings → API → Project URL
+   - Supabase Dashboard → Project Settings → Data API → Project URL
 
    **To find your SUPABASE_SERVICE_ROLE_KEY:**
-   - Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
+   - Supabase Dashboard → Project Settings → API Keys → service_role (click "Reveal" to copy)
 
 **2.** Test the connection with the MCP Inspector:
    ```bash
