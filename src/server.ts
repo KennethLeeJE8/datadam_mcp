@@ -393,27 +393,28 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
     "create-personal-data",
     {
       title: "Store New Personal Data",
-      description: `Capture and store personal data when user shares information. AGGRESSIVE CAPTURE MODE: Trigger when user mentions personal details, even without explicit "save" command.
+      description: `Capture and store personal data when user shares information about themselves. The user's AI tool settings determine whether to store automatically or ask for consent first.
 
-EXPLICIT TRIGGERS (100% confidence):
-- "save this", "remember that", "store my", "add to my", "keep this", "note that", "record this"
+CORE PRINCIPLE: If the user mentions anything about themselves, their preferences, their life, their contacts, or their experiences - this tool should be used to store it.
 
-IMPLICIT TRIGGERS (80%+ confidence - still capture):
-- "my email is...", "I live in...", "I work at...", "my favorite [X] is...", "I like...", "I prefer..."
-- "I'm learning...", "I use [tool]...", "[person] is my [relationship]", "I'm a [role]"
-
-CONTEXTUAL TRIGGERS (60%+ confidence):
-- User answers questions with personal details
-- User introduces someone with contact info
-- User mentions tools/technologies they use
+TRIGGERS (indicating personal data is being shared):
+- Explicit storage requests: "save this", "remember that", "store my", "add to my", "keep this", "note that", "record this"
+- Personal statements: "my [anything] is...", "I live in/at...", "I work at/as...", "my favorite [X] is...", "I like...", "I prefer...", "I love..."
+- Identity/role: "I'm learning...", "I use [tool]...", "I'm using...", "I'm a [role]", "I'm from..."
+- Relationships/people: "[person] is my [relationship]", "I know [person]", "I met [person]"
+- Experiences: "I went to...", "I tried...", "I've been to...", "I bought...", "I have...", "I read [book]", "I'm reading..."
+- Current context: "I'm in [location]", "I'm working on X", "I know [skill]", "I subscribe to Y"
+- Opinions/preferences: "I think...", "I believe...", "I feel..." (when about personal preferences)
+- Activities: "I [verb] at [place]", "I [verb] with [person]", "I [verb] [activity]"
 
 CATEGORY SELECTION (must use one of the allowed categories):
-- Email/phone/person → contacts
-- Book/reading → books or favorite_authors
-- Tool/tech/app → digital_products
-- Hobby/interest/learning → interests
-- Location/background → basic_information
-- Preference/choice → preferences
+- Email/phone/person/relationship → contacts
+- Book/reading/author → books or favorite_authors
+- Tool/tech/app/software/platform → digital_products
+- Hobby/interest/learning/skill/activity → interests
+- Location/background/age/job/role/personal detail → basic_information
+- Preference/choice/opinion/like/dislike → preferences
+- File/document/paper → documents
 
 ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences`,
       inputSchema: {
@@ -469,19 +470,28 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
     "update-personal-data",
     {
       title: "Update Existing Personal Data",
-      description: `Modify existing personal data records. Requires record UUID from previous search/extract. Use when user wants to change or correct information.
+      description: `Modify existing personal data records. Requires record UUID from previous search/extract. Use when user shares information that contradicts, corrects, or updates previously stored data.
 
-TRIGGER KEYWORDS: "update [X]", "change [X]", "modify [X]", "edit [X]", "correct [X]", "fix [X]", "revise [X]", "[X] changed to [Y]", "new [X] is [Y]", "actually it's [X]"
+TRIGGERS (indicating data should be updated):
+- Explicit update requests: "update [X]", "change [X]", "modify [X]", "edit [X]", "correct [X]", "fix [X]", "revise [X]"
+- Life changes: "I moved to [X]", "My new [X] is...", "I now [verb]...", "I switched to...", "I changed to..."
+- Corrections: "actually...", "no, it's...", "I meant...", "correction:", "not [X], [Y]"
+- Status changes: "I'm no longer...", "I quit...", "I started...", "I joined..."
+- Conflicting information: User shares different information about same topic (e.g., mentions new email when old one exists)
+- Self-corrections: "Actually I live in Boston now", "I got a new job at X"
 
 WORKFLOW:
-1. User requests update
-2. If UUID unknown: search/extract to find record first
-3. Apply updates to identified record
-4. Confirm (don't show UUID to user)
+1. User shares update (explicit or implicit)
+2. Search/extract to find existing record first
+3. If found: apply updates to identified record
+4. If not found: use create-personal-data instead
+5. Confirm (don't show UUID to user)
 
 EXAMPLES:
 - "Update John's email to new@email.com" → search for John → update with UUID
-- "Change my location to Boston" → extract basic_information → find location → update`,
+- "I moved to Boston" → extract basic_information for location → update
+- "My new phone is 555-1234" → search for phone in contacts → update
+- "Actually I work at Google now" → search for job/company → update`,
       inputSchema: {
         recordId: z.string().describe("UUID of record to update. Obtain from search-personal-data or extract-personal-data first. Never show to user."),
         updates: z.record(z.any()).describe("Fields to update. Only include changed fields. Examples: {content: {email: 'new@email.com'}}, {tags: ['family', 'urgent']}"),
