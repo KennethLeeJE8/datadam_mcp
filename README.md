@@ -21,11 +21,11 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 | Tool | Title | Purpose | Required | Optional |
 | --- | --- | --- | --- | --- |
-| `search-personal-data` | Search Personal Data | Find records by title and content; filter by categories/tags. | `query` | `categories`, `tags`, `classification`, `limit`, `userId` |
-| `extract-personal-data` | Extract Personal Data by Category | List items in one category, optionally filtered by tags. | `category` | `tags`, `limit`, `offset`, `userId`, `filters` |
-| `create-personal-data` | Create Personal Data | Store a new record with category, title, and JSON content. | `category`, `title`, `content` | `tags`, `classification`, `userId` |
-| `update-personal-data` | Update Personal Data | Update fields on an existing record by ID. | `recordId` | `title`, `content`, `tags`, `category`, `classification` |
-| `delete-personal-data` | Delete Personal Data | Delete one or more records; optional hard delete. | `recordIds` | `hardDelete` |
+| `datadam_search_personal_data` | Search Personal Data | Find records by title and content; filter by categories/tags. | `query` | `categories`, `tags`, `classification`, `limit`, `userId` |
+| `datadam_extract_personal_data` | Extract Personal Data by Category | List items in one category, optionally filtered by tags. | `category` | `tags`, `limit`, `offset`, `userId`, `filters` |
+| `datadam_create_personal_data` | Create Personal Data | Store a new record with category, title, and JSON content. | `category`, `title`, `content` | `tags`, `classification`, `userId` |
+| `datadam_update_personal_data` | Update Personal Data | Update fields on an existing record by ID. | `recordId` | `title`, `content`, `tags`, `category`, `classification` |
+| `datadam_delete_personal_data` | Delete Personal Data | Delete one or more records; optional hard delete. | `recordIds` | `hardDelete` |
 
 - ChatGPT endpoint tools (at `…/chatgpt_mcp`)
 
@@ -286,7 +286,7 @@ Tips to use tools:
 You can add categories in the category_resgistry table and it will dynamically update in resources. 
 
 ### Server tools (at `…/mcp`)
-- search-personal-data
+- datadam_search_personal_data
   - Purpose: Find records by title and content; optionally filter by categories and tags.
   - Args: `query` (required); `categories?` string[]; `tags?` string[]; `classification?` one of `public|personal|sensitive|confidential`; `limit?` number (default 20); `userId?` string (UUID).
   - Example:
@@ -298,7 +298,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- extract-personal-data
+- datadam_extract_personal_data
   - Purpose: List items in a single category; refine with tags.
   - Args: `category` (required string); `tags?` string[]; `limit?` number (default 50); `offset?` number; `userId?` string (UUID); `filters?` object.
   - Example:
@@ -310,7 +310,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- create-personal-data
+- datadam_create_personal_data
   - Purpose: Store a new record.
   - Args: `category` (required string); `title` (required string); `content` (required object/JSON); `tags?` string[]; `classification?` (default `personal`); `userId?` string (UUID).
   - Example:
@@ -323,7 +323,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- update-personal-data
+- datadam_update_personal_data
   - Purpose: Update fields on an existing record by ID.
   - Args: `recordId` (required string UUID); plus any fields to change: `title?`, `content?`, `tags?`, `category?`, `classification?`.
   - Example:
@@ -334,7 +334,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- delete-personal-data
+- datadam_delete_personal_data
   - Purpose: Delete one or more records; optional hard delete for permanent removal.
   - Args: `recordIds` (required string[] of UUIDs); `hardDelete?` boolean (default false).
   - Example:

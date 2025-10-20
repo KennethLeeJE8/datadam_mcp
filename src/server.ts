@@ -9,6 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import { generateUsageGuideHtml } from "./usageGuide.js";
+import { formatAsMarkdown, formatAsJSON, formatSuccessMessage, formatErrorMessage } from "./utils/formatting.js";
 
 // Load environment variables
 dotenv.config();
@@ -152,7 +153,7 @@ function createMcpServer(): McpServer {
 
   // Register the search personal data tool
   server.registerTool(
-    "search-personal-data",
+    "datadam_search_personal_data",
     {
       title: "Search Personal Data by Keyword",
       description: `Search for SPECIFIC datapoints, names, or details across all personal data using keyword matching. Use when looking for a specific person, thing, or piece of information (e.g., "find John's email", "my passport number", "Docker info"). Returns ranked results with context snippets.
@@ -175,10 +176,11 @@ TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is
         tags: z.array(z.string()).optional().describe("Optional: Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']"),
         classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Optional: Filter by data sensitivity level"),
         limit: z.number().min(1).max(100).default(20).describe("Max results. Default: 20, Max: 100"),
-        userId: z.string().optional().describe("Optional: User UUID.")
+        userId: z.string().optional().describe("Optional: User UUID."),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ query, categories, tags, classification, limit = 20, userId }) => {
+    async ({ query, categories, tags, classification, limit = 20, userId, response_format = 'markdown' }) => {
       try {
         // Remove surrounding quotes if present
         const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
@@ -212,45 +214,66 @@ TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and ensure Supabase is configured correctly",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         if (!results || results.length === 0) {
+          const suggestion = "Try:\n- Using broader search terms\n- Checking spelling\n- Removing category filters\n- Using datadam_extract_personal_data to browse categories";
           return {
             content: [{
               type: "text",
-              text: `No personal data found matching query: "${query}"`
+              text: formatErrorMessage(
+                `No results found matching query: "${query}"`,
+                suggestion,
+                response_format
+              )
             }]
           };
         }
 
-        const resultText = results.map((item: PersonalDataRecord) => {
-          const contentPreview = typeof item.content === 'object' 
-            ? JSON.stringify(item.content, null, 2).substring(0, 200) 
-            : String(item.content).substring(0, 200);
-          
-          return `${item.title}
-   Record ID: ${item.id}
-   Category: ${item.category || 'Uncategorized'}
-   Classification: ${item.classification}
-   Tags: ${item.tags?.join(', ') || 'None'}
-   Content: ${contentPreview}${contentPreview.length >= 200 ? '...' : ''}
-   Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
-        }).join('\n\n');
+        // Format response based on response_format parameter
+        if (response_format === 'json') {
+          const responseText = formatAsJSON({
+            results: results,
+            total: results.length,
+            count: results.length,
+            hasMore: false,
+            nextOffset: 0
+          });
 
-        return {
-          content: [{
-            type: "text",
-            text: `Found ${results.length} items matching "${query}":\n\n${resultText}`
-          }]
-        };
+          return {
+            content: [{
+              type: "text",
+              text: responseText
+            }]
+          };
+        } else {
+          // Markdown format
+          const responseText = formatAsMarkdown(results, { showIds: true });
+
+          return {
+            content: [{
+              type: "text",
+              text: `Found ${results.length} items matching "${query}":\n\n${responseText}`
+            }]
+          };
+        }
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error searching personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error searching personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists",
+              response_format
+            )
           }],
           isError: true
         };
@@ -279,7 +302,7 @@ TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is
   };
 
   server.registerTool(
-    "extract-personal-data",
+    "datadam_extract_personal_data",
     {
       title: "List Items by Category/Tags",
       description: `Retrieve items by CATEGORY or TAGS when browsing/listing without specific search terms. Use for "show me all my X" requests or tag-based filtering. Returns complete records.
@@ -305,10 +328,11 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
         limit: z.number().min(1).max(100).default(50).describe("Results per page. Default: 50, Max: 100"),
         offset: z.number().min(0).default(0).describe("Pagination offset"),
         userId: z.string().optional().describe("Optional: User UUID."),
-        filters: z.record(z.any()).optional().describe("Optional: Additional field-level filters")
+        filters: z.record(z.any()).optional().describe("Optional: Additional field-level filters"),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ category, tags, userId, filters, limit = 50, offset = 0 }) => {
+    async ({ category, tags, userId, filters, limit = 50, offset = 0, response_format = 'markdown' }) => {
       try {
         // Refresh categories before processing
         const latestCategories = await fetchAvailableCategories();
@@ -339,48 +363,68 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and ensure the category exists",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         if (!results || results.length === 0) {
-          const filterInfo = tags && tags.length > 0 
+          const filterInfo = tags && tags.length > 0
             ? ` in category: ${category} with tags: ${tags.join(', ')}`
             : ` in category: ${category}`;
           return {
             content: [{
               type: "text",
-              text: `No personal data found${filterInfo}`
+              text: formatErrorMessage(
+                `No personal data found${filterInfo}`,
+                "Try removing tag filters or using a different category",
+                response_format
+              )
             }]
           };
         }
 
-        const resultText = results.map((item: PersonalDataRecord) => {
-          const contentPreview = typeof item.content === 'object' 
-            ? JSON.stringify(item.content, null, 2).substring(0, 200) 
-            : String(item.content).substring(0, 200);
-          
-          return `${item.title}
-   Record ID: ${item.id}
-   Category: ${item.category || 'Uncategorized'}
-   Classification: ${item.classification}
-   Tags: ${item.tags?.join(', ') || 'None'}
-   Content: ${contentPreview}${contentPreview.length >= 200 ? '...' : ''}
-   Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
-        }).join('\n\n');
+        // Format response based on response_format parameter
+        if (response_format === 'json') {
+          const responseText = formatAsJSON({
+            results: results,
+            total: results.length,
+            count: results.length,
+            hasMore: results.length === limit,
+            nextOffset: offset + results.length
+          });
 
-        return {
-          content: [{
-            type: "text",
-            text: `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${resultText}`
-          }]
-        };
+          return {
+            content: [{
+              type: "text",
+              text: responseText
+            }]
+          };
+        } else {
+          // Markdown format
+          const responseText = formatAsMarkdown(results, { showIds: true });
+
+          return {
+            content: [{
+              type: "text",
+              text: `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${responseText}`
+            }]
+          };
+        }
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error extracting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error extracting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists",
+              response_format
+            )
           }],
           isError: true
         };
@@ -390,7 +434,7 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
 
   // Register the create personal data tool
   server.registerTool(
-    "create-personal-data",
+    "datadam_create_personal_data",
     {
       title: "Store New Personal Data",
       description: `Capture and store personal data when user shares information about themselves. The user's AI tool settings determine whether to store automatically or ask for consent first.
@@ -423,10 +467,11 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
         content: z.record(z.any()).describe("Structured attributes/characteristics as JSON key-value pairs tied to the title. Keep concise - attributes only, NOT explanations or long lists. Examples: {email: 'x@y.com', phone: '555-1234'}, {author: 'Matt Ridley', genre: 'Science'}, {location: 'Boston, MA', state: 'Massachusetts'}"),
         tags: z.array(z.string()).optional().describe("Optional tags. Singular forms: 'family', 'work', 'favorite', 'urgent', 'learning' (NOT plural)"),
         classification: z.enum(['personal', 'sensitive', 'confidential']).default('personal').describe("Sensitivity level. Default: 'personal'. Use 'sensitive' for private info, 'confidential' for highly sensitive"),
-        userId: z.string().optional().describe("Optional: User UUID.")
+        userId: z.string().optional().describe("Optional: User UUID."),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ category, title, content, tags, classification = 'personal', userId }) => {
+    async ({ category, title, content, tags, classification = 'personal', userId, response_format = 'markdown' }) => {
       try {
 
         const { data: result, error } = await supabase.rpc('create_personal_data', {
@@ -442,22 +487,31 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and ensure the Supabase credentials are correct.",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         return {
           content: [{
             type: "text",
-            text: `Successfully created personal data record: "${title}" in category "${category}"`
+            text: formatSuccessMessage('created', title, category, response_format)
           }]
         };
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error creating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error creating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Verify that all required fields are provided and properly formatted.",
+              response_format
+            )
           }],
           isError: true
         };
@@ -467,7 +521,7 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
 
   // Register the update personal data tool
   server.registerTool(
-    "update-personal-data",
+    "datadam_update_personal_data",
     {
       title: "Update Existing Personal Data",
       description: `Modify existing personal data records. Requires record UUID from previous search/extract. Use when user shares information that contradicts, corrects, or updates previously stored data.
@@ -493,12 +547,13 @@ EXAMPLES:
 - "My new phone is 555-1234" → search for phone in contacts → update
 - "Actually I work at Google now" → search for job/company → update`,
       inputSchema: {
-        recordId: z.string().describe("UUID of record to update. Obtain from search-personal-data or extract-personal-data first. Never show to user."),
+        recordId: z.string().describe("UUID of record to update. Obtain from datadam_search_personal_data or datadam_extract_personal_data first. Never show to user."),
         updates: z.record(z.any()).describe("Fields to update. Only include changed fields. Examples: {content: {email: 'new@email.com'}}, {tags: ['family', 'urgent']}"),
-        conversationContext: z.string().optional().describe("Optional: Conversation context for extracting updates")
+        conversationContext: z.string().optional().describe("Optional: Conversation context for extracting updates"),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ recordId, updates, conversationContext }) => {
+    async ({ recordId, updates, conversationContext, response_format = 'markdown' }) => {
       try {
         // Debug logging
         console.log('Update parameters:', {
@@ -519,8 +574,13 @@ EXAMPLES:
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and verify the record ID is correct.",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
@@ -528,7 +588,11 @@ EXAMPLES:
           return {
             content: [{
               type: "text",
-              text: `Record not found or no changes made: ${recordId}`
+              text: formatErrorMessage(
+                `Record not found or no changes made: ${recordId}`,
+                "Verify the record ID exists using datadam_search_personal_data or datadam_extract_personal_data.",
+                response_format
+              )
             }],
             isError: true
           };
@@ -537,14 +601,18 @@ EXAMPLES:
         return {
           content: [{
             type: "text",
-            text: `Successfully updated personal data record: ${recordId}`
+            text: formatSuccessMessage('updated', result.title || recordId, result.category, response_format)
           }]
         };
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error updating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error updating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists.",
+              response_format
+            )
           }],
           isError: true
         };
@@ -554,7 +622,7 @@ EXAMPLES:
 
   // Register the delete personal data tool
   server.registerTool(
-    "delete-personal-data",
+    "datadam_delete_personal_data",
     {
       title: "Delete Personal Data Records",
       description: `Remove personal data records. Requires record UUID(s) from previous search/extract. Use when user explicitly wants to delete information.
@@ -575,10 +643,11 @@ WORKFLOW:
 SAFETY: Always confirm before bulk deletes (3+ records) or hard deletes. Default to soft delete unless GDPR request.`,
       inputSchema: {
         recordIds: z.array(z.string()).min(1).describe("Array of record UUIDs to delete. Obtain from search/extract first. Examples: ['uuid1'], ['uuid1', 'uuid2']. Never show to user."),
-        hardDelete: z.boolean().default(false).describe("Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance. WARNING: Cannot be undone.")
+        hardDelete: z.boolean().default(false).describe("Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance. WARNING: Cannot be undone."),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ recordIds, hardDelete = false }) => {
+    async ({ recordIds, hardDelete = false, response_format = 'markdown' }) => {
       try {
         const { data: result, error } = await supabase.rpc('delete_personal_data', {
           p_record_ids: recordIds,
@@ -589,45 +658,88 @@ SAFETY: Always confirm before bulk deletes (3+ records) or hard deletes. Default
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and verify the record IDs are correct.",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         const deletedCount = result || 0;
         const requestedCount = recordIds.length;
         const deleteType = hardDelete ? 'permanently deleted' : 'soft deleted';
-        
+        const operation = hardDelete ? 'deleted' : 'deleted';
+
         if (deletedCount === 0) {
           return {
             content: [{
               type: "text",
-              text: `No records were ${deleteType}. Records may not exist or were already deleted.`
+              text: formatErrorMessage(
+                `No records were ${deleteType}. Records may not exist or were already deleted.`,
+                "Verify the record IDs using datadam_search_personal_data or datadam_extract_personal_data.",
+                response_format
+              )
             }],
             isError: true
           };
         }
-        
+
         if (deletedCount < requestedCount) {
+          const message = `Partially successful: ${deleteType} ${deletedCount} of ${requestedCount} requested record(s). Some records may not exist or were already deleted.`;
+          if (response_format === 'json') {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  success: true,
+                  operation: deleteType,
+                  count: deletedCount,
+                  requested_count: requestedCount,
+                  message: message
+                }, null, 2)
+              }]
+            };
+          }
           return {
             content: [{
               type: "text",
-              text: `Partially successful: ${deleteType} ${deletedCount} of ${requestedCount} requested record(s). Some records may not exist or were already deleted.`
+              text: `⚠️ ${message}`
             }]
           };
         }
 
+        const message = `Successfully ${deleteType} ${deletedCount} personal data record(s)`;
+        if (response_format === 'json') {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                operation: deleteType,
+                count: deletedCount,
+                message: message
+              }, null, 2)
+            }]
+          };
+        }
         return {
           content: [{
             type: "text",
-            text: `Successfully ${deleteType} ${deletedCount} personal data record(s)`
+            text: `✓ ${message}`
           }]
         };
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error deleting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error deleting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists.",
+              response_format
+            )
           }],
           isError: true
         };
@@ -996,11 +1108,11 @@ async function main() {
       console.log(`\nResources:`);
       console.log(`- data://categories - List available personal data categories`);
       console.log(`\n🔍 Main Tools:`);
-      console.log(`- search-personal-data - Search through personal data by title and content`);
-      console.log(`- extract-personal-data - Extract data by category with optional tag filtering`);
-      console.log(`- create-personal-data - Create new personal data records`);
-      console.log(`- update-personal-data - Update existing records`);
-      console.log(`- delete-personal-data - Delete records`);
+      console.log(`- datadam_search_personal_data - Search through personal data by title and content`);
+      console.log(`- datadam_extract_personal_data - Extract data by category with optional tag filtering`);
+      console.log(`- datadam_create_personal_data - Create new personal data records`);
+      console.log(`- datadam_update_personal_data - Update existing records`);
+      console.log(`- datadam_delete_personal_data - Delete records`);
       console.log(`\n🤖 ChatGPT Tools:`);
       console.log(`- search - Search for documents (ChatGPT format)`);
       console.log(`- fetch - Fetch complete document content (ChatGPT format)`);
