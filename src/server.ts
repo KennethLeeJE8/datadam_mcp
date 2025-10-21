@@ -165,11 +165,36 @@ WHEN TO USE:
 - Cross-category keyword search needed
 
 WHEN NOT TO USE:
-- Browsing entire category → use extract-personal-data instead
-- "All my [category]" or "list my [category]" → use extract-personal-data instead
-- No specific search term, just browsing tags → use extract-personal-data instead
+- Browsing entire category → use datadam_extract_personal_data instead
+- "All my [category]" or "list my [category]" → use datadam_extract_personal_data instead
+- No specific search term, just browsing tags → use datadam_extract_personal_data instead
 
-TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is", "lookup", "get [specific info]", "tell me about [specific thing]"`,
+TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is", "lookup", "get [specific info]", "tell me about [specific thing]"
+
+Args:
+  - query (string, required): Specific search term, name, or datapoint to find
+  - categories (string[], optional): Narrow search to specific categories. Examples: ['contacts'], ['books', 'documents']
+  - tags (string[], optional): Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']
+  - classification (enum, optional): Filter by sensitivity - 'public', 'personal', 'sensitive', or 'confidential'
+  - limit (number, optional): Max results. Range: 1-100, Default: 20
+  - userId (string, optional): User UUID for multi-user systems
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - For JSON format: Structured data with schema: {total, count, results[], has_more, next_offset}
+  - For Markdown format: Human-readable numbered list with categories, tags, content previews
+  - Each result includes: id, title, category, tags, content, classification, created_at, updated_at
+
+Examples:
+  1. Find contact: { query: "John email", categories: ["contacts"], limit: 10 }
+  2. Find book: { query: "Matt Ridley", categories: ["books", "favorite_authors"] }
+  3. Cross-category: { query: "Docker", tags: ["learning"] }
+  4. JSON output: { query: "address", response_format: "json" }
+
+Error Handling:
+  - No results: Returns "No results found matching '<query>'" with suggestions (try broader terms, check spelling, use datadam_extract_personal_data)
+  - Database errors: Returns error message with connection troubleshooting guidance
+  - Invalid category: Ignores invalid categories, searches remaining valid ones`,
       inputSchema: {
         query: z.string().describe("Specific search term, name, or datapoint to find. Must be concrete reference. Examples: 'John email', 'passport', 'TypeScript', 'Matt Ridley', 'Boston address'"),
         categories: z.array(z.string()).optional().describe("Optional: Narrow search to specific categories if known. Examples: ['contacts'], ['books', 'documents']. Leave empty to search all."),
@@ -315,13 +340,38 @@ WHEN TO USE:
 - Tag-based filtering within category
 
 WHEN NOT TO USE:
-- Searching for specific person/thing → use search-personal-data
-- Looking for specific datapoint by name → use search-personal-data
-- Need keyword matching → use search-personal-data
+- Searching for specific person/thing → use datadam_search_personal_data
+- Looking for specific datapoint by name → use datadam_search_personal_data
+- Need keyword matching → use datadam_search_personal_data
 
 TRIGGER KEYWORDS: "all my [category]", "my [category]", "list my", "show me my", "what [category] do I have", "[tag] [category]", "browse my"
 
-ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences`,
+ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+
+Args:
+  - category (string, required): Exact category name. Available: contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+  - tags (string[], optional): Filter within category by tags. Singular forms only. Examples: ['family'], ['work'], ['sci-fi']
+  - limit (number, optional): Results per page. Range: 1-100, Default: 50
+  - offset (number, optional): Pagination offset for browsing large result sets. Default: 0
+  - userId (string, optional): User UUID for multi-user systems
+  - filters (object, optional): Additional field-level filters
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - For JSON format: Structured data with schema: {total, count, results[], has_more, next_offset}
+  - For Markdown format: Human-readable numbered list with complete record details
+  - Each result includes: id, title, category, tags, full content, classification, created_at, updated_at
+
+Examples:
+  1. List all contacts: { category: "contacts", limit: 20 }
+  2. Family contacts only: { category: "contacts", tags: ["family"] }
+  3. Browse books with pagination: { category: "books", limit: 10, offset: 10 }
+  4. JSON output: { category: "interests", response_format: "json" }
+
+Error Handling:
+  - No records found: Returns "No personal data found in category: {category}" with optional tag info
+  - Invalid category: Returns error with list of available categories
+  - Database errors: Returns error message with troubleshooting guidance`,
       inputSchema: {
         category: getCategorySchema(),
         tags: z.array(z.string()).optional().describe("Optional: Filter within category by tags. Singular forms only. Examples: ['family'], ['work'], ['sci-fi']"),
@@ -460,7 +510,32 @@ CATEGORY SELECTION (must use one of the allowed categories):
 - Preference/choice/opinion/like/dislike → preferences
 - File/document/paper → documents
 
-ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences`,
+ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+
+Args:
+  - category (string, required): One of the allowed categories above
+  - title (string, required): Descriptive title for the record. Examples: 'John Smith - Work Contact', 'Current Location'
+  - content (object, required): Structured attributes as JSON key-value pairs. Keep concise - attributes only, NOT explanations
+  - tags (string[], optional): Tags in singular form. Examples: ['family'], ['work'], ['favorite']
+  - classification (string, optional): Sensitivity level - 'personal' (default), 'sensitive', or 'confidential'
+  - userId (string, optional): User UUID for multi-user systems
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - Success message confirming record creation with title and category
+  - For JSON format: {success: true, operation: "created", title, category, message}
+  - For Markdown format: "✓ Successfully created record: **{title}** in category **{category}**"
+
+Examples:
+  1. Store contact: { category: "contacts", title: "John Smith - Work", content: { email: "john@work.com", phone: "555-1234" }, tags: ["work"] }
+  2. Store book: { category: "books", title: "The Evolution of Everything", content: { author: "Matt Ridley", genre: "Science" }, tags: ["favorite"] }
+  3. Store location: { category: "basic_information", title: "Current Location", content: { city: "Boston", state: "MA" } }
+  4. Sensitive data: { category: "documents", title: "Passport", content: { number: "A123..." }, classification: "confidential" }
+
+Error Handling:
+  - Database errors: Returns error with connection troubleshooting guidance
+  - Invalid category: Returns error with list of allowed categories
+  - Missing required fields: Returns error indicating which fields are required (category, title, content)`,
       inputSchema: {
         category: getCategorySchema(),
         title: z.string().describe("Descriptive title. Examples: 'John Smith - Work Contact', 'Favorite Author - Matt Ridley', 'Current Location', 'Learning Docker'"),
@@ -538,14 +613,37 @@ WORKFLOW:
 1. User shares update (explicit or implicit)
 2. Search/extract to find existing record first
 3. If found: apply updates to identified record
-4. If not found: use create-personal-data instead
+4. If not found: use datadam_create_personal_data instead
 5. Confirm (don't show UUID to user)
 
 EXAMPLES:
 - "Update John's email to new@email.com" → search for John → update with UUID
 - "I moved to Boston" → extract basic_information for location → update
 - "My new phone is 555-1234" → search for phone in contacts → update
-- "Actually I work at Google now" → search for job/company → update`,
+- "Actually I work at Google now" → search for job/company → update
+
+Args:
+  - recordId (string, required): UUID of record to update. Obtain from datadam_search_personal_data or datadam_extract_personal_data first
+  - updates (object, required): Fields to update. Only include changed fields. Can include: title, content, tags, category, classification
+  - conversationContext (string, optional): Conversation context for extracting updates
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - Success message confirming record update
+  - For JSON format: {success: true, operation: "updated", recordId, message}
+  - For Markdown format: "✓ Successfully updated record: **{title}**"
+
+Examples:
+  1. Update email: { recordId: "<UUID>", updates: { content: { email: "new@email.com" } } }
+  2. Update tags: { recordId: "<UUID>", updates: { tags: ["family", "urgent"] } }
+  3. Update title: { recordId: "<UUID>", updates: { title: "Emergency Contact – Updated" } }
+  4. Multiple fields: { recordId: "<UUID>", updates: { title: "John - CEO", content: { role: "CEO" } } }
+
+Error Handling:
+  - Record not found: Returns "Record not found or no changes made: {recordId}" with isError flag
+  - Database errors: Returns error with troubleshooting guidance
+  - Invalid recordId format: Returns error indicating UUID format required
+  - No changes: Returns error if updates object is empty or no fields changed`,
       inputSchema: {
         recordId: z.string().describe("UUID of record to update. Obtain from datadam_search_personal_data or datadam_extract_personal_data first. Never show to user."),
         updates: z.record(z.any()).describe("Fields to update. Only include changed fields. Examples: {content: {email: 'new@email.com'}}, {tags: ['family', 'urgent']}"),
@@ -640,7 +738,30 @@ WORKFLOW:
 4. Delete with appropriate type
 5. Confirm (don't show UUIDs)
 
-SAFETY: Always confirm before bulk deletes (3+ records) or hard deletes. Default to soft delete unless GDPR request.`,
+SAFETY: Always confirm before bulk deletes (3+ records) or hard deletes. Default to soft delete unless GDPR request.
+
+Args:
+  - recordIds (string[], required): Array of record UUIDs to delete. Obtain from search/extract first. Examples: ['uuid1'], ['uuid1', 'uuid2']
+  - hardDelete (boolean, optional): Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - Success message confirming deletion with count and type
+  - For JSON format: {success: true, operation: "deleted" | "permanently deleted", count, requested_count, message}
+  - For Markdown format: "✓ Successfully {soft/permanently} deleted {count} personal data record(s)"
+  - Partial success: Indicates if some records couldn't be deleted
+
+Examples:
+  1. Soft delete one: { recordIds: ["uuid1"] }
+  2. Soft delete multiple: { recordIds: ["uuid1", "uuid2", "uuid3"] }
+  3. Hard delete (GDPR): { recordIds: ["uuid1"], hardDelete: true }
+  4. JSON output: { recordIds: ["uuid1"], response_format: "json" }
+
+Error Handling:
+  - No records deleted: Returns "No records were {deleted/permanently deleted}. Records may not exist or were already deleted"
+  - Partial deletion: Returns "Partially successful: {deleted} {count} of {requested} requested record(s)"
+  - Database errors: Returns error with troubleshooting guidance
+  - Invalid UUIDs: Returns error indicating UUID format required`,
       inputSchema: {
         recordIds: z.array(z.string()).min(1).describe("Array of record UUIDs to delete. Obtain from search/extract first. Examples: ['uuid1'], ['uuid1', 'uuid2']. Never show to user."),
         hardDelete: z.boolean().default(false).describe("Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance. WARNING: Cannot be undone."),
