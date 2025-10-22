@@ -8,6 +8,8 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
+import { generateUsageGuideHtml } from "./usageGuide.js";
+import { formatAsMarkdown, formatAsJSON, formatSuccessMessage, formatErrorMessage } from "./utils/formatting.js";
 
 // Load environment variables
 dotenv.config();
@@ -84,8 +86,9 @@ async function initializeDatabase(): Promise<void> {
 
 function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: "personal-data-mcp-server",
-    version: "1.0.0"
+    name: "datadam",
+    version: "1.0.0",
+    description: "Personal knowledge database that automatically retrieves stored personal context when needed for personalized responses. Captures and stores personal information when user shares details. Triggers on: 'my [anything]', personal questions, preference queries, or when personal context would improve responses."
   });
 
   // Register the categories list resource
@@ -150,31 +153,71 @@ function createMcpServer(): McpServer {
 
   // Register the search personal data tool
   server.registerTool(
-    "search-personal-data",
+    "datadam_search_personal_data",
     {
-      title: "Search Personal Data",
-      description: "Search through personal data by title and content. Can search for a specific user or across all users. IMPORTANT: This tool should be triggered when users mention 'my' followed by any category name (e.g., 'my books', 'my contacts', 'my preferences', 'my documents', 'my favorite authors', etc.) as this indicates they want a personalized response based on their stored data. Also trigger for queries about personal information, preferences, or any stored user data.",
+      title: "Search Personal Data by Keyword",
+      description: `Search for SPECIFIC datapoints, names, or details across all personal data using keyword matching. Use when looking for a specific person, thing, or piece of information (e.g., "find John's email", "my passport number", "Docker info"). Returns ranked results with context snippets.
+
+WHEN TO USE:
+- Searching for specific person: "find John", "who is Sarah"
+- Looking for specific datapoint: "my passport number", "email address", "phone number"
+- Specific details mentioned: proper nouns, concrete terms
+- Cross-category keyword search needed
+
+WHEN NOT TO USE:
+- Browsing entire category → use datadam_extract_personal_data instead
+- "All my [category]" or "list my [category]" → use datadam_extract_personal_data instead
+- No specific search term, just browsing tags → use datadam_extract_personal_data instead
+
+TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is", "lookup", "get [specific info]", "tell me about [specific thing]"
+
+Args:
+  - query (string, required): Specific search term, name, or datapoint to find
+  - categories (string[], optional): Narrow search to specific categories. Examples: ['contacts'], ['books', 'documents']
+  - tags (string[], optional): Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']
+  - classification (enum, optional): Filter by sensitivity - 'public', 'personal', 'sensitive', or 'confidential'
+  - limit (number, optional): Max results. Range: 1-100, Default: 20
+  - userId (string, optional): User UUID for multi-user systems
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - For JSON format: Structured data with schema: {total, count, results[], has_more, next_offset}
+  - For Markdown format: Human-readable numbered list with categories, tags, content previews
+  - Each result includes: id, title, category, tags, content, classification, created_at, updated_at
+
+Examples:
+  1. Find contact: { query: "John email", categories: ["contacts"], limit: 10 }
+  2. Find book: { query: "Matt Ridley", categories: ["books", "favorite_authors"] }
+  3. Cross-category: { query: "Docker", tags: ["learning"] }
+  4. JSON output: { query: "address", response_format: "json" }
+
+Error Handling:
+  - No results: Returns "No results found matching '<query>'" with suggestions (try broader terms, check spelling, use datadam_extract_personal_data)
+  - Database errors: Returns error message with connection troubleshooting guidance
+  - Invalid category: Ignores invalid categories, searches remaining valid ones`,
       inputSchema: {
-        query: z.string().describe("Search query to find in titles and content. For 'my {category}' queries, extract the relevant search term or use the category name itself"),
-        userId: z.string().optional().describe("Optional: User ID (UUID) to search data for. If not provided, searches across all users."),
-        categories: z.array(z.string()).optional().describe("Filter by specific categories (e.g., 'books', 'contacts'). When user says 'my {category}', include that category here"),
-        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Filter by classification level"),
-        limit: z.number().min(1).max(100).default(20).describe("Maximum number of results to return")
+        query: z.string().describe("Specific search term, name, or datapoint to find. Must be concrete reference. Examples: 'John email', 'passport', 'TypeScript', 'Matt Ridley', 'Boston address'"),
+        categories: z.array(z.string()).optional().describe("Optional: Narrow search to specific categories if known. Examples: ['contacts'], ['books', 'documents']. Leave empty to search all."),
+        tags: z.array(z.string()).optional().describe("Optional: Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']"),
+        classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Optional: Filter by data sensitivity level"),
+        limit: z.number().min(1).max(100).default(20).describe("Max results. Default: 20, Max: 100"),
+        userId: z.string().optional().describe("Optional: User UUID."),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ query, userId, categories, classification, limit = 20 }) => {
+    async ({ query, categories, tags, classification, limit = 20, userId, response_format = 'markdown' }) => {
       try {
         // Remove surrounding quotes if present
         const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
-        
+
         // Detect "my {category}" pattern and auto-categorize if not already specified
         const myPattern = /\bmy\s+(\w+)/gi;
         const matches = cleanQuery.match(myPattern);
-        
+
         if (matches && (!categories || categories.length === 0)) {
           // Extract potential category from "my X" pattern
           const potentialCategory = matches[0].replace(/\bmy\s+/i, '').toLowerCase();
-          
+
           // Check if it matches any available categories
           if (availableCategories.includes(potentialCategory)) {
             categories = [potentialCategory];
@@ -186,7 +229,7 @@ function createMcpServer(): McpServer {
           p_user_id: userId || null,
           p_search_text: cleanQuery,
           p_categories: (categories && categories.length > 0) ? categories : null,
-          p_tags: null,
+          p_tags: (tags && tags.length > 0) ? tags : null,
           p_classification: classification || null,
           p_limit: limit,
           p_offset: 0
@@ -196,45 +239,66 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and ensure Supabase is configured correctly",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         if (!results || results.length === 0) {
+          const suggestion = "Try:\n- Using broader search terms\n- Checking spelling\n- Removing category filters\n- Using datadam_extract_personal_data to browse categories";
           return {
             content: [{
               type: "text",
-              text: `No personal data found matching query: "${query}"`
+              text: formatErrorMessage(
+                `No results found matching query: "${query}"`,
+                suggestion,
+                response_format
+              )
             }]
           };
         }
 
-        const resultText = results.map((item: PersonalDataRecord) => {
-          const contentPreview = typeof item.content === 'object' 
-            ? JSON.stringify(item.content, null, 2).substring(0, 200) 
-            : String(item.content).substring(0, 200);
-          
-          return `${item.title}
-   Record ID: ${item.id}
-   Category: ${item.category || 'Uncategorized'}
-   Classification: ${item.classification}
-   Tags: ${item.tags?.join(', ') || 'None'}
-   Content: ${contentPreview}${contentPreview.length >= 200 ? '...' : ''}
-   Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
-        }).join('\n\n');
+        // Format response based on response_format parameter
+        if (response_format === 'json') {
+          const responseText = formatAsJSON({
+            results: results,
+            total: results.length,
+            count: results.length,
+            hasMore: false,
+            nextOffset: 0
+          });
 
-        return {
-          content: [{
-            type: "text",
-            text: `Found ${results.length} items matching "${query}":\n\n${resultText}`
-          }]
-        };
+          return {
+            content: [{
+              type: "text",
+              text: responseText
+            }]
+          };
+        } else {
+          // Markdown format
+          const responseText = formatAsMarkdown(results, { showIds: true });
+
+          return {
+            content: [{
+              type: "text",
+              text: `Found ${results.length} items matching "${query}":\n\n${responseText}`
+            }]
+          };
+        }
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error searching personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error searching personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists",
+              response_format
+            )
           }],
           isError: true
         };
@@ -245,35 +309,80 @@ function createMcpServer(): McpServer {
   // Register the extract personal data tool
   // NOTE: Categories should be plural where grammatically appropriate (contacts, books, documents)
   // Tags should always use singular forms (family, work, sci-fi, personal)
-  
+
   // Create category schema dynamically
   const getCategorySchema = () => {
     if (availableCategories.length > 0) {
       // Use enum when categories are available for better UI experience
       return z.enum(availableCategories as [string, ...string[]]).describe(
-        `Select a category to filter by. Available categories: ${availableCategories.join(', ')}`
+        `Category to filter by. Available: ${availableCategories.join(', ')}`
       );
     } else {
-      // Fallback to string when categories aren't loaded yet
-      return z.string().describe("Category to filter by (categories are loaded dynamically from database)");
+      // Fallback to fixed set when database not loaded
+      return z.enum([
+        "contacts", "books", "favorite_authors", "interests",
+        "basic_information", "digital_products", "documents", "preferences"
+      ] as [string, ...string[]]).describe("Category to filter by");
     }
   };
-  
+
   server.registerTool(
-    "extract-personal-data",
+    "datadam_extract_personal_data",
     {
-      title: "Extract Personal Data by Category",
-      description: "Extract groups of similar entries by category from a specific user profile or all profiles. TRIGGER: Use this tool when users ask for 'my {category}' (e.g., 'my books', 'my contacts') to retrieve all items in that category. A single category is mandatory for broad collection retrieval. Tags are optional and used for further filtering within the category (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). This complements the search tool for category-specific retrieval.",
+      title: "List Items by Category/Tags",
+      description: `Retrieve items by CATEGORY or TAGS when browsing/listing without specific search terms. Use for "show me all my X" requests or tag-based filtering. Returns complete records.
+
+WHEN TO USE:
+- Listing entire category: "all my contacts", "my books"
+- Browsing by tag: "family contacts", "work items"
+- "Show me my [category]" requests
+- Exploring what's in a category
+- Tag-based filtering within category
+
+WHEN NOT TO USE:
+- Searching for specific person/thing → use datadam_search_personal_data
+- Looking for specific datapoint by name → use datadam_search_personal_data
+- Need keyword matching → use datadam_search_personal_data
+
+TRIGGER KEYWORDS: "all my [category]", "my [category]", "list my", "show me my", "what [category] do I have", "[tag] [category]", "browse my"
+
+ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+
+Args:
+  - category (string, required): Exact category name. Available: contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+  - tags (string[], optional): Filter within category by tags. Singular forms only. Examples: ['family'], ['work'], ['sci-fi']
+  - limit (number, optional): Results per page. Range: 1-100, Default: 50
+  - offset (number, optional): Pagination offset for browsing large result sets. Default: 0
+  - userId (string, optional): User UUID for multi-user systems
+  - filters (object, optional): Additional field-level filters
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - For JSON format: Structured data with schema: {total, count, results[], has_more, next_offset}
+  - For Markdown format: Human-readable numbered list with complete record details
+  - Each result includes: id, title, category, tags, full content, classification, created_at, updated_at
+
+Examples:
+  1. List all contacts: { category: "contacts", limit: 20 }
+  2. Family contacts only: { category: "contacts", tags: ["family"] }
+  3. Browse books with pagination: { category: "books", limit: 10, offset: 10 }
+  4. JSON output: { category: "interests", response_format: "json" }
+
+Error Handling:
+  - No records found: Returns "No personal data found in category: {category}" with optional tag info
+  - Invalid category: Returns error with list of available categories
+  - Database errors: Returns error message with troubleshooting guidance`,
       inputSchema: {
         category: getCategorySchema(),
-        tags: z.array(z.string()).optional().describe("Optional: Multiple tags to filter entries within the category. Tags are used for further filtering (e.g., ['family', 'work'] for contacts, ['sci-fi', 'fantasy'] for books). Use singular forms for tags."),
-        userId: z.string().optional().describe("Optional: Specify which user profile to extract from"),
-        filters: z.record(z.any()).optional().describe("Optional: Additional filtering criteria"),
-        limit: z.number().min(1).max(100).default(50).describe("Maximum number of records"),
-        offset: z.number().min(0).default(0).describe("Pagination offset")
+        tags: z.array(z.string()).optional().describe("Optional: Filter within category by tags. Singular forms only. Examples: ['family'], ['work'], ['sci-fi']"),
+        limit: z.number().min(1).max(100).default(50).describe("Results per page. Default: 50, Max: 100"),
+        offset: z.number().min(0).default(0).describe("Pagination offset"),
+        userId: z.string().optional().describe("Optional: User UUID."),
+        filters: z.record(z.any()).optional().describe("Optional: Additional field-level filters"),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ category, tags, userId, filters, limit = 50, offset = 0 }) => {
+    async ({ category, tags, userId, filters, limit = 50, offset = 0, response_format = 'markdown' }) => {
       try {
         // Refresh categories before processing
         const latestCategories = await fetchAvailableCategories();
@@ -304,48 +413,68 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and ensure the category exists",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         if (!results || results.length === 0) {
-          const filterInfo = tags && tags.length > 0 
+          const filterInfo = tags && tags.length > 0
             ? ` in category: ${category} with tags: ${tags.join(', ')}`
             : ` in category: ${category}`;
           return {
             content: [{
               type: "text",
-              text: `No personal data found${filterInfo}`
+              text: formatErrorMessage(
+                `No personal data found${filterInfo}`,
+                "Try removing tag filters or using a different category",
+                response_format
+              )
             }]
           };
         }
 
-        const resultText = results.map((item: PersonalDataRecord) => {
-          const contentPreview = typeof item.content === 'object' 
-            ? JSON.stringify(item.content, null, 2).substring(0, 200) 
-            : String(item.content).substring(0, 200);
-          
-          return `${item.title}
-   Record ID: ${item.id}
-   Category: ${item.category || 'Uncategorized'}
-   Classification: ${item.classification}
-   Tags: ${item.tags?.join(', ') || 'None'}
-   Content: ${contentPreview}${contentPreview.length >= 200 ? '...' : ''}
-   Updated: ${new Date(item.updated_at).toLocaleDateString()}`;
-        }).join('\n\n');
+        // Format response based on response_format parameter
+        if (response_format === 'json') {
+          const responseText = formatAsJSON({
+            results: results,
+            total: results.length,
+            count: results.length,
+            hasMore: results.length === limit,
+            nextOffset: offset + results.length
+          });
 
-        return {
-          content: [{
-            type: "text",
-            text: `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${resultText}`
-          }]
-        };
+          return {
+            content: [{
+              type: "text",
+              text: responseText
+            }]
+          };
+        } else {
+          // Markdown format
+          const responseText = formatAsMarkdown(results, { showIds: true });
+
+          return {
+            content: [{
+              type: "text",
+              text: `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${responseText}`
+            }]
+          };
+        }
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error extracting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error extracting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists",
+              response_format
+            )
           }],
           isError: true
         };
@@ -355,20 +484,69 @@ function createMcpServer(): McpServer {
 
   // Register the create personal data tool
   server.registerTool(
-    "create-personal-data",
+    "datadam_create_personal_data",
     {
-      title: "Create Personal Data",
-      description: "Automatically capture and store ANY personal data mentioned in conversations. This tool should be called whenever the user shares ANY personal information like names, contacts, preferences, locations, interests, or any other personal details.",
+      title: "Store New Personal Data",
+      description: `Capture and store personal data when user shares information about themselves. The user's AI tool settings determine whether to store automatically or ask for consent first.
+
+CORE PRINCIPLE: If the user mentions anything about themselves, their preferences, their life, their contacts, or their experiences - this tool should be used to store it.
+
+TRIGGERS (indicating personal data is being shared):
+- Explicit storage requests: "save this", "remember that", "store my", "add to my", "keep this", "note that", "record this"
+- Personal statements: "my [anything] is...", "I live in/at...", "I work at/as...", "my favorite [X] is...", "I like...", "I prefer...", "I love..."
+- Identity/role: "I'm learning...", "I use [tool]...", "I'm using...", "I'm a [role]", "I'm from..."
+- Relationships/people: "[person] is my [relationship]", "I know [person]", "I met [person]"
+- Experiences: "I went to...", "I tried...", "I've been to...", "I bought...", "I have...", "I read [book]", "I'm reading..."
+- Current context: "I'm in [location]", "I'm working on X", "I know [skill]", "I subscribe to Y"
+- Opinions/preferences: "I think...", "I believe...", "I feel..." (when about personal preferences)
+- Activities: "I [verb] at [place]", "I [verb] with [person]", "I [verb] [activity]"
+
+CATEGORY SELECTION (must use one of the allowed categories):
+- Email/phone/person/relationship → contacts
+- Book/reading/author → books or favorite_authors
+- Tool/tech/app/software/platform → digital_products
+- Hobby/interest/learning/skill/activity → interests
+- Location/background/age/job/role/personal detail → basic_information
+- Preference/choice/opinion/like/dislike → preferences
+- File/document/paper → documents
+
+ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+
+Args:
+  - category (string, required): One of the allowed categories above
+  - title (string, required): Descriptive title for the record. Examples: 'John Smith - Work Contact', 'Current Location'
+  - content (object, required): Structured attributes as JSON key-value pairs. Keep concise - attributes only, NOT explanations
+  - tags (string[], optional): Tags in singular form. Examples: ['family'], ['work'], ['favorite']
+  - classification (string, optional): Sensitivity level - 'personal' (default), 'sensitive', or 'confidential'
+  - userId (string, optional): User UUID for multi-user systems
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - Success message confirming record creation with title and category
+  - For JSON format: {success: true, operation: "created", title, category, message}
+  - For Markdown format: "✓ Successfully created record: **{title}** in category **{category}**"
+
+Examples:
+  1. Store contact: { category: "contacts", title: "John Smith - Work", content: { email: "john@work.com", phone: "555-1234" }, tags: ["work"] }
+  2. Store book: { category: "books", title: "The Evolution of Everything", content: { author: "Matt Ridley", genre: "Science" }, tags: ["favorite"] }
+  3. Store location: { category: "basic_information", title: "Current Location", content: { city: "Boston", state: "MA" } }
+  4. Sensitive data: { category: "documents", title: "Passport", content: { number: "A123..." }, classification: "confidential" }
+
+Error Handling:
+  - Database errors: Returns error with connection troubleshooting guidance
+  - Invalid category: Returns error with list of allowed categories
+  - Missing required fields: Returns error indicating which fields are required (category, title, content)`,
       inputSchema: {
-        userId: z.string().optional().describe("Optional: User identifier. If not provided, creates record without user association."),
-        category: z.enum(['contacts', 'basic_information', 'books', 'favorite_authors', 'interests', 'digital_products']).describe("Category of personal data to store"),
-        title: z.string().describe("Record title").describe("Title that describes the record being produced"),
-        content: z.record(z.any()).describe("Record content").describe("The content of the record being produced"),
-        tags: z.array(z.string()).optional().describe("Tags for categorization (use singular forms: 'family', 'work', 'personal', etc.)"),
-        classification: z.enum(['personal', 'sensitive', 'confidential']).default('personal').describe("Data classification level")
+        category: getCategorySchema(),
+        title: z.string().describe("Descriptive title. Examples: 'John Smith - Work Contact', 'Favorite Author - Matt Ridley', 'Current Location', 'Learning Docker'"),
+        content: z.record(z.any()).describe("Structured attributes/characteristics as JSON key-value pairs tied to the title. Keep concise - attributes only, NOT explanations or long lists. Examples: {email: 'x@y.com', phone: '555-1234'}, {author: 'Matt Ridley', genre: 'Science'}, {location: 'Boston, MA', state: 'Massachusetts'}"),
+        tags: z.array(z.string()).optional().describe("Optional tags. Singular forms: 'family', 'work', 'favorite', 'urgent', 'learning' (NOT plural)"),
+        classification: z.enum(['personal', 'sensitive', 'confidential']).default('personal').describe("Sensitivity level. Default: 'personal'. Use 'sensitive' for private info, 'confidential' for highly sensitive"),
+        userId: z.string().optional().describe("Optional: User UUID."),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ userId, category, title, content, tags, classification = 'personal' }) => {
+    async ({ category, title, content, tags, classification = 'personal', userId, response_format = 'markdown' }) => {
       try {
 
         const { data: result, error } = await supabase.rpc('create_personal_data', {
@@ -384,22 +562,31 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and ensure the Supabase credentials are correct.",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         return {
           content: [{
             type: "text",
-            text: `Successfully created personal data record: "${title}" in category "${category}"`
+            text: formatSuccessMessage('created', title, category, response_format)
           }]
         };
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error creating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error creating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Verify that all required fields are provided and properly formatted.",
+              response_format
+            )
           }],
           isError: true
         };
@@ -409,17 +596,62 @@ function createMcpServer(): McpServer {
 
   // Register the update personal data tool
   server.registerTool(
-    "update-personal-data",
+    "datadam_update_personal_data",
     {
-      title: "Update Personal Data",
-      description: "Automatically update existing personal data records when new or updated information is mentioned. Requires the UUID of the specific data record to identify which item to update. This tool should be called whenever the user provides ANY updated information about previously stored data.",
+      title: "Update Existing Personal Data",
+      description: `Modify existing personal data records. Requires record UUID from previous search/extract. Use when user shares information that contradicts, corrects, or updates previously stored data.
+
+TRIGGERS (indicating data should be updated):
+- Explicit update requests: "update [X]", "change [X]", "modify [X]", "edit [X]", "correct [X]", "fix [X]", "revise [X]"
+- Life changes: "I moved to [X]", "My new [X] is...", "I now [verb]...", "I switched to...", "I changed to..."
+- Corrections: "actually...", "no, it's...", "I meant...", "correction:", "not [X], [Y]"
+- Status changes: "I'm no longer...", "I quit...", "I started...", "I joined..."
+- Conflicting information: User shares different information about same topic (e.g., mentions new email when old one exists)
+- Self-corrections: "Actually I live in Boston now", "I got a new job at X"
+
+WORKFLOW:
+1. User shares update (explicit or implicit)
+2. Search/extract to find existing record first
+3. If found: apply updates to identified record
+4. If not found: use datadam_create_personal_data instead
+5. Confirm (don't show UUID to user)
+
+EXAMPLES:
+- "Update John's email to new@email.com" → search for John → update with UUID
+- "I moved to Boston" → extract basic_information for location → update
+- "My new phone is 555-1234" → search for phone in contacts → update
+- "Actually I work at Google now" → search for job/company → update
+
+Args:
+  - recordId (string, required): UUID of record to update. Obtain from datadam_search_personal_data or datadam_extract_personal_data first
+  - updates (object, required): Fields to update. Only include changed fields. Can include: title, content, tags, category, classification
+  - conversationContext (string, optional): Conversation context for extracting updates
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - Success message confirming record update
+  - For JSON format: {success: true, operation: "updated", recordId, message}
+  - For Markdown format: "✓ Successfully updated record: **{title}**"
+
+Examples:
+  1. Update email: { recordId: "<UUID>", updates: { content: { email: "new@email.com" } } }
+  2. Update tags: { recordId: "<UUID>", updates: { tags: ["family", "urgent"] } }
+  3. Update title: { recordId: "<UUID>", updates: { title: "Emergency Contact – Updated" } }
+  4. Multiple fields: { recordId: "<UUID>", updates: { title: "John - CEO", content: { role: "CEO" } } }
+
+Error Handling:
+  - Record not found: Returns "Record not found or no changes made: {recordId}" with isError flag
+  - Database errors: Returns error with troubleshooting guidance
+  - Invalid recordId format: Returns error indicating UUID format required
+  - No changes: Returns error if updates object is empty or no fields changed`,
       inputSchema: {
-        recordId: z.string().describe("Record identifier (UUID) to update"),
-        updates: z.record(z.any()).describe("Fields to update"),
-        conversationContext: z.string().optional().describe("The conversation context from which to extract updates (for passive mode)")
+        recordId: z.string().describe("UUID of record to update. Obtain from datadam_search_personal_data or datadam_extract_personal_data first. Never show to user."),
+        updates: z.record(z.any()).describe("Fields to update. Only include changed fields. Examples: {content: {email: 'new@email.com'}}, {tags: ['family', 'urgent']}"),
+        conversationContext: z.string().optional().describe("Optional: Conversation context for extracting updates"),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ recordId, updates, conversationContext }) => {
+    async ({ recordId, updates, conversationContext, response_format = 'markdown' }) => {
       try {
         // Debug logging
         console.log('Update parameters:', {
@@ -440,8 +672,13 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and verify the record ID is correct.",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
@@ -449,7 +686,11 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `Record not found or no changes made: ${recordId}`
+              text: formatErrorMessage(
+                `Record not found or no changes made: ${recordId}`,
+                "Verify the record ID exists using datadam_search_personal_data or datadam_extract_personal_data.",
+                response_format
+              )
             }],
             isError: true
           };
@@ -458,14 +699,18 @@ function createMcpServer(): McpServer {
         return {
           content: [{
             type: "text",
-            text: `Successfully updated personal data record: ${recordId}`
+            text: formatSuccessMessage('updated', result.title || recordId, result.category, response_format)
           }]
         };
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error updating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error updating personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists.",
+              response_format
+            )
           }],
           isError: true
         };
@@ -475,16 +720,55 @@ function createMcpServer(): McpServer {
 
   // Register the delete personal data tool
   server.registerTool(
-    "delete-personal-data",
+    "datadam_delete_personal_data",
     {
-      title: "Delete Personal Data",
-      description: "Delete personal data records. Requires the UUID(s) of the specific data record(s) to identify which items to delete. Use with caution - supports both soft and hard deletion for GDPR compliance.",
+      title: "Delete Personal Data Records",
+      description: `Remove personal data records. Requires record UUID(s) from previous search/extract. Use when user explicitly wants to delete information.
+
+TRIGGER KEYWORDS: "delete [X]", "remove [X]", "erase [X]", "forget [X]", "get rid of [X]", "clear [X]", "I don't want [X] anymore"
+
+DELETION TYPES:
+- Soft Delete (default): Marks as deleted, recoverable. Use for most cases.
+- Hard Delete: Permanent removal. Use ONLY for GDPR "right to be forgotten" requests.
+
+WORKFLOW:
+1. User requests deletion
+2. If UUID unknown: search/extract to find record(s) first
+3. Confirm if bulk or hard delete
+4. Delete with appropriate type
+5. Confirm (don't show UUIDs)
+
+SAFETY: Always confirm before bulk deletes (3+ records) or hard deletes. Default to soft delete unless GDPR request.
+
+Args:
+  - recordIds (string[], required): Array of record UUIDs to delete. Obtain from search/extract first. Examples: ['uuid1'], ['uuid1', 'uuid2']
+  - hardDelete (boolean, optional): Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance
+  - response_format (string, optional): 'markdown' (default, human-readable) or 'json' (machine-readable)
+
+Returns:
+  - Success message confirming deletion with count and type
+  - For JSON format: {success: true, operation: "deleted" | "permanently deleted", count, requested_count, message}
+  - For Markdown format: "✓ Successfully {soft/permanently} deleted {count} personal data record(s)"
+  - Partial success: Indicates if some records couldn't be deleted
+
+Examples:
+  1. Soft delete one: { recordIds: ["uuid1"] }
+  2. Soft delete multiple: { recordIds: ["uuid1", "uuid2", "uuid3"] }
+  3. Hard delete (GDPR): { recordIds: ["uuid1"], hardDelete: true }
+  4. JSON output: { recordIds: ["uuid1"], response_format: "json" }
+
+Error Handling:
+  - No records deleted: Returns "No records were {deleted/permanently deleted}. Records may not exist or were already deleted"
+  - Partial deletion: Returns "Partially successful: {deleted} {count} of {requested} requested record(s)"
+  - Database errors: Returns error with troubleshooting guidance
+  - Invalid UUIDs: Returns error indicating UUID format required`,
       inputSchema: {
-        recordIds: z.array(z.string()).min(1).describe("Record identifiers (UUIDs) to delete"),
-        hardDelete: z.boolean().default(false).describe("Permanent deletion for GDPR compliance")
+        recordIds: z.array(z.string()).min(1).describe("Array of record UUIDs to delete. Obtain from search/extract first. Examples: ['uuid1'], ['uuid1', 'uuid2']. Never show to user."),
+        hardDelete: z.boolean().default(false).describe("Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance. WARNING: Cannot be undone."),
+        response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
       }
     },
-    async ({ recordIds, hardDelete = false }) => {
+    async ({ recordIds, hardDelete = false, response_format = 'markdown' }) => {
       try {
         const { data: result, error } = await supabase.rpc('delete_personal_data', {
           p_record_ids: recordIds,
@@ -495,45 +779,88 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `Database error: ${error.message}`
-            }]
+              text: formatErrorMessage(
+                `Database error: ${error.message}`,
+                "Check your database connection and verify the record IDs are correct.",
+                response_format
+              )
+            }],
+            isError: true
           };
         }
 
         const deletedCount = result || 0;
         const requestedCount = recordIds.length;
         const deleteType = hardDelete ? 'permanently deleted' : 'soft deleted';
-        
+        const operation = hardDelete ? 'deleted' : 'deleted';
+
         if (deletedCount === 0) {
           return {
             content: [{
               type: "text",
-              text: `No records were ${deleteType}. Records may not exist or were already deleted.`
+              text: formatErrorMessage(
+                `No records were ${deleteType}. Records may not exist or were already deleted.`,
+                "Verify the record IDs using datadam_search_personal_data or datadam_extract_personal_data.",
+                response_format
+              )
             }],
             isError: true
           };
         }
-        
+
         if (deletedCount < requestedCount) {
+          const message = `Partially successful: ${deleteType} ${deletedCount} of ${requestedCount} requested record(s). Some records may not exist or were already deleted.`;
+          if (response_format === 'json') {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  success: true,
+                  operation: deleteType,
+                  count: deletedCount,
+                  requested_count: requestedCount,
+                  message: message
+                }, null, 2)
+              }]
+            };
+          }
           return {
             content: [{
               type: "text",
-              text: `Partially successful: ${deleteType} ${deletedCount} of ${requestedCount} requested record(s). Some records may not exist or were already deleted.`
+              text: `⚠️ ${message}`
             }]
           };
         }
 
+        const message = `Successfully ${deleteType} ${deletedCount} personal data record(s)`;
+        if (response_format === 'json') {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                operation: deleteType,
+                count: deletedCount,
+                message: message
+              }, null, 2)
+            }]
+          };
+        }
         return {
           content: [{
             type: "text",
-            text: `Successfully ${deleteType} ${deletedCount} personal data record(s)`
+            text: `✓ ${message}`
           }]
         };
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error deleting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`
+            text: formatErrorMessage(
+              `Error deleting personal data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              "Please try again or contact support if the issue persists.",
+              response_format
+            )
           }],
           isError: true
         };
@@ -554,10 +881,22 @@ function createChatGptMcpServer(): McpServer {
   server.registerTool(
     "search",
     {
-      title: "Search",
-      description: "Search through personal data by matching against title, tags, and categories only (not content).\n\nCATEGORY DEFINITIONS & SEARCH GUIDANCE:\n- books: Use for queries about reading, literature, novels, fiction, non-fiction, textbooks, book reviews, or any book-related content. Keywords: books, reading, literature, novels, authors\n- contacts: Use for queries about people, friends, family, colleagues, relationships, networking, or contact information. Keywords: contacts, friends, family, colleagues, people, relationships\n- documents: Use for queries about files, papers, records, notes, reports, or written materials. Keywords: documents, files, papers, records, notes\n- basic_information: Use for queries about personal details, profile info, contact details, or general personal data. Keywords: personal info, profile, name, email, phone, address\n- digital_products: Use for queries about software, apps, tools, services, platforms, subscriptions, or technology. Keywords: software, apps, tools, services, applications, programs\n- preferences: Use for queries about settings, choices, options, configurations, or user preferences. Keywords: preferences, settings, configuration, options, choices\n- interests: Use for queries about hobbies, activities, likes, passions, or personal interests. Keywords: interests, hobbies, likes, activities, passions\n- favorite_authors: Use for queries about writers, novelists, poets, or literary authors. Keywords: authors, writers, novelists, poets\n\nSEARCH STRATEGY: If searching for specific items returns no results, try broader category terms. Always consider which category would contain the type of information being requested.",
+      title: "Search Personal Data",
+      description: `Search through personal data by matching against title, tags, and categories only (not content). Returns citation-friendly results.
+
+ALLOWED CATEGORY FILTERS (fixed set):
+- books: Reading, literature, novels, fiction, non-fiction, textbooks, book reviews
+- contacts: People, friends, family, colleagues, relationships, networking, contact info
+- documents: Files, papers, records, notes, reports, written materials
+- basic_information: Personal details, profile info, contact details, general personal data
+- digital_products: Software, apps, tools, services, platforms, subscriptions, technology
+- preferences: Settings, choices, options, configurations, user preferences
+- interests: Hobbies, activities, likes, passions, personal interests
+- favorite_authors: Writers, novelists, poets, literary authors
+
+SEARCH STRATEGY: If specific items return no results, try broader category terms. Consider which category would contain the requested information type.`,
       inputSchema: {
-        query: z.string().describe("Search query to find relevant documents")
+        query: z.string().describe("Search query to match against titles, tags, and categories")
       }
     },
     async ({ query }) => {
@@ -624,10 +963,10 @@ function createChatGptMcpServer(): McpServer {
   server.registerTool(
     "fetch",
     {
-      title: "Fetch",
-      description: "Retrieve complete document content by ID including full text, metadata, and all associated information",
+      title: "Fetch Document by ID",
+      description: "Retrieve complete document content by ID including full text, metadata, and all associated information.",
       inputSchema: {
-        id: z.string().describe("Document ID to fetch")
+        id: z.string().describe("Document ID (UUID) to retrieve. Obtained from search results.")
       }
     },
     async ({ id }) => {
@@ -709,11 +1048,22 @@ async function main() {
 
   // Health check endpoint for Render
   app.get('/health', (req: express.Request, res: express.Response) => {
-    res.status(200).json({ 
+    res.status(200).json({
       status: 'healthy',
       service: 'MCP Personal Data Server',
       timestamp: new Date().toISOString()
     });
+  });
+
+  // Root endpoint - Usage Guide HTML
+  app.get('/', async (req: express.Request, res: express.Response) => {
+    try {
+      const html = await generateUsageGuideHtml(supabase);
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    } catch (error) {
+      res.status(500).send('Error loading usage guide');
+    }
   });
 
   // Map to store transports by session ID
@@ -879,11 +1229,11 @@ async function main() {
       console.log(`\nResources:`);
       console.log(`- data://categories - List available personal data categories`);
       console.log(`\n🔍 Main Tools:`);
-      console.log(`- search-personal-data - Search through personal data by title and content`);
-      console.log(`- extract-personal-data - Extract data by category with optional tag filtering`);
-      console.log(`- create-personal-data - Create new personal data records`);
-      console.log(`- update-personal-data - Update existing records`);
-      console.log(`- delete-personal-data - Delete records`);
+      console.log(`- datadam_search_personal_data - Search through personal data by title and content`);
+      console.log(`- datadam_extract_personal_data - Extract data by category with optional tag filtering`);
+      console.log(`- datadam_create_personal_data - Create new personal data records`);
+      console.log(`- datadam_update_personal_data - Update existing records`);
+      console.log(`- datadam_delete_personal_data - Delete records`);
       console.log(`\n🤖 ChatGPT Tools:`);
       console.log(`- search - Search for documents (ChatGPT format)`);
       console.log(`- fetch - Fetch complete document content (ChatGPT format)`);

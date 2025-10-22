@@ -13,9 +13,6 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
   - Tags are used as an optional refinement to narrow down results within each category
   - More information on how each tool works can be found [here](#tool-details)
 
-- How to use it
-  - 
-
 - Data model
   - Categories are maintained in the database and surfaced via the `data://categories` resource, which are static at the moment. 
   - Filtering order: choose a category first, then use `tags` to further narrow results within that category (tags are optional refinements, not replacements).
@@ -24,11 +21,11 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 | Tool | Title | Purpose | Required | Optional |
 | --- | --- | --- | --- | --- |
-| `search-personal-data` | Search Personal Data | Find records by title and content; filter by categories/tags. | `query` | `categories`, `tags`, `classification`, `limit`, `userId` |
-| `extract-personal-data` | Extract Personal Data by Category | List items in one category, optionally filtered by tags. | `category` | `tags`, `limit`, `offset`, `userId`, `filters` |
-| `create-personal-data` | Create Personal Data | Store a new record with category, title, and JSON content. | `category`, `title`, `content` | `tags`, `classification`, `userId` |
-| `update-personal-data` | Update Personal Data | Update fields on an existing record by ID. | `recordId` | `title`, `content`, `tags`, `category`, `classification` |
-| `delete-personal-data` | Delete Personal Data | Delete one or more records; optional hard delete. | `recordIds` | `hardDelete` |
+| `datadam_search_personal_data` | Search Personal Data | Find records by title and content; filter by categories/tags. | `query` | `categories`, `tags`, `classification`, `limit`, `userId` |
+| `datadam_extract_personal_data` | Extract Personal Data by Category | List items in one category, optionally filtered by tags. | `category` | `tags`, `limit`, `offset`, `userId`, `filters` |
+| `datadam_create_personal_data` | Create Personal Data | Store a new record with category, title, and JSON content. | `category`, `title`, `content` | `tags`, `classification`, `userId` |
+| `datadam_update_personal_data` | Update Personal Data | Update fields on an existing record by ID. | `recordId` | `title`, `content`, `tags`, `category`, `classification` |
+| `datadam_delete_personal_data` | Delete Personal Data | Delete one or more records; optional hard delete. | `recordIds` | `hardDelete` |
 
 - ChatGPT endpoint tools (at `…/chatgpt_mcp`)
 
@@ -55,11 +52,10 @@ DataDam supports two connection methods:
 
 ## Prerequisites
 
+- **Homebrew**: Package Manager for MacOS and Linux - [Homebrew](https://brew.sh/)
 - **Git**: Version control system - [Download Git](https://git-scm.com/downloads)
 - **Node.js + npm**: JavaScript runtime and package manager - [Download Node.js](https://nodejs.org/en/download)
 - **Accounts**: Supabase (required), Render (for hosting)
-- **CLI**: PostgreSQL client `psql` (for building before deploy if needed)
-  - **Mac users**: Install via Homebrew: `brew install postgresql`
 
 ## Quickstart
 
@@ -89,52 +85,56 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 - **Important**: Remember your password - you'll need it for the database connection later
 - Create a new project and wait for it to finish setting up
 
-**2.** Load the database schema (choose one method):
+**2.** Load the database schema (choose preferred option):
 
-**Option 2a)** Using psql command line:
-- Download PostgreSQL and the CLI from: [PostgreSQL Downloads](https://www.postgresql.org/download/)
-
-- **Note**: Use the **Connect** button at the top of the page to get your transaction pooler string
-- Copy the connection string (looks like this):
-```
-postgres://postgres.xxxxx:[YOUR_PASSWORD]@aws-0-us-west-1.pooler.supabase.com:6543/postgres
-```
-- Run this command with your connection string:
-```bash
-psql "your_connection_string_here" -f src/database/schema.sql
-```
-
-**Option 2b)** Using Supabase SQL Editor:
+**Option 2a)** Using Supabase SQL Editor:
 - Copy the entire contents of [src/database/schema.sql](./src/database/schema.sql) 
 - Supabase Dashboard → SQL Editor → New query
 - Paste the copied schema code into the editor
 - Click "Run" to execute the schema
 
-**3.** You should see your Supabase table editor view populated with tables. 
+**3.** You should see your Supabase table editor view populated with tables in "Table Editor".
 
-**4.** Set up environment variables by cloning the .env file:
+✅ **Supabase setup is complete!** Your database is ready to use.
+
+### **Choose Your Connection Type**
+
+Select the connection method based on your AI tool:
+
+- **Option A: Stdio (Standard Input/Output)**
+  - Use for: Coding agents (Cursor, Windsurf, etc.), Claude Desktop (Free tier)
+  - Next step: Continue to [Local Testing](#local-testing) section below
+
+- **Option B: HTTP Streamable**
+  - Use for: ChatGPT Plus or higher, Claude Pro or higher
+  - Next step: Skip to [Render Deployment](#render-deployment-only-for-streamable-http-server) section
+
+### **Local Testing**
+
+**1.** Set up environment variables by cloning the .env file:
    ```bash
    cp .env.example .env
    ```
    Edit `.env` and add your Supabase credentials:
-   
-   **To find your SUPABASE_URL:**
-   - Supabase Dashboard → Project Settings → API → Project URL
-   
-   **To find your SUPABASE_SERVICE_ROLE_KEY:**
-   - Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
 
-### **Local Testing**
-- **Test**: 
-  ```bash
-  npm run inspector:stdio
-  ```
+   **To find your SUPABASE_URL:**
+   - Supabase Dashboard → Project Settings → Data API → Project URL
+
+   **To find your SUPABASE_SERVICE_ROLE_KEY:**
+   - Supabase Dashboard → Project Settings → API Keys → service_role (click "Reveal" to copy)
+
+**2.** Test the connection with the MCP Inspector:
+   ```bash
+   npm run inspector:stdio
+   ```
    - **Transport**: Select "stdio"
    - **Arguments**: Enter "server.js"
    - Click "Connect"
-- **Verify**: The inspector should connect and show available tools, confirming Supabase database connection
-- **Test**: Go to the Tools tab and click "List Tools" → find "extract_personal_data_tool" → enter "interests" for categories → click "Run Tool" to verify database connectivity
-- You should see a datapoint on "MCP (Model Context Protocol)"
+
+**3.** Verify the setup:
+   - **Verify**: The inspector should connect and show available tools, confirming Supabase database connection
+   - **Test**: Go to the Tools tab and click "List Tools" → find "extract_personal_data_tool" → enter "interests" for categories → click "Run Tool" to verify database connectivity
+   - You should see a datapoint on "MCP (Model Context Protocol)"
 
 ### **Render Deployment (Only for Streamable HTTP Server)**
 
@@ -286,7 +286,7 @@ Tips to use tools:
 You can add categories in the category_resgistry table and it will dynamically update in resources. 
 
 ### Server tools (at `…/mcp`)
-- search-personal-data
+- datadam_search_personal_data
   - Purpose: Find records by title and content; optionally filter by categories and tags.
   - Args: `query` (required); `categories?` string[]; `tags?` string[]; `classification?` one of `public|personal|sensitive|confidential`; `limit?` number (default 20); `userId?` string (UUID).
   - Example:
@@ -298,7 +298,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- extract-personal-data
+- datadam_extract_personal_data
   - Purpose: List items in a single category; refine with tags.
   - Args: `category` (required string); `tags?` string[]; `limit?` number (default 50); `offset?` number; `userId?` string (UUID); `filters?` object.
   - Example:
@@ -310,7 +310,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- create-personal-data
+- datadam_create_personal_data
   - Purpose: Store a new record.
   - Args: `category` (required string); `title` (required string); `content` (required object/JSON); `tags?` string[]; `classification?` (default `personal`); `userId?` string (UUID).
   - Example:
@@ -323,7 +323,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- update-personal-data
+- datadam_update_personal_data
   - Purpose: Update fields on an existing record by ID.
   - Args: `recordId` (required string UUID); plus any fields to change: `title?`, `content?`, `tags?`, `category?`, `classification?`.
   - Example:
@@ -334,7 +334,7 @@ You can add categories in the category_resgistry table and it will dynamically u
     }
     ```
 
-- delete-personal-data
+- datadam_delete_personal_data
   - Purpose: Delete one or more records; optional hard delete for permanent removal.
   - Args: `recordIds` (required string[] of UUIDs); `hardDelete?` boolean (default false).
   - Example:
