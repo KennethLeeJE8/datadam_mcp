@@ -190,41 +190,49 @@ ALTER TABLE error_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE error_recovery_attempts ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role to bypass RLS for admin operations
+DROP POLICY IF EXISTS "service_role_full_access_profiles" ON profiles;
 CREATE POLICY "service_role_full_access_profiles" ON profiles
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_personal_data" ON personal_data;
 CREATE POLICY "service_role_full_access_personal_data" ON personal_data
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_audit_log" ON data_access_log;
 CREATE POLICY "service_role_full_access_audit_log" ON data_access_log
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_error_logs" ON error_logs;
 CREATE POLICY "service_role_full_access_error_logs" ON error_logs
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_error_alerts" ON error_alerts;
 CREATE POLICY "service_role_full_access_error_alerts" ON error_alerts
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_error_metrics" ON error_metrics;
 CREATE POLICY "service_role_full_access_error_metrics" ON error_metrics
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_error_recovery_attempts" ON error_recovery_attempts;
 CREATE POLICY "service_role_full_access_error_recovery_attempts" ON error_recovery_attempts
   FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_category_registry" ON category_registry;
 CREATE POLICY "service_role_full_access_category_registry" ON category_registry
   FOR ALL TO service_role
   USING (true)
@@ -233,33 +241,40 @@ CREATE POLICY "service_role_full_access_category_registry" ON category_registry
 -- Profiles policies
 -- Note: These policies assume auth.uid() matches user_id
 
+DROP POLICY IF EXISTS "users_can_view_own_profile" ON profiles;
 CREATE POLICY "users_can_view_own_profile" ON profiles
   FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "users_can_update_own_profile" ON profiles;
 CREATE POLICY "users_can_update_own_profile" ON profiles
   FOR UPDATE TO authenticated
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "users_can_insert_own_profile" ON profiles;
 CREATE POLICY "users_can_insert_own_profile" ON profiles
   FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 -- Personal data policies
+DROP POLICY IF EXISTS "users_can_crud_own_data" ON personal_data;
 CREATE POLICY "users_can_crud_own_data" ON personal_data
   FOR ALL TO authenticated
   USING (user_id = auth.uid());
 
 -- Audit log policies
+DROP POLICY IF EXISTS "users_can_view_own_logs" ON data_access_log;
 CREATE POLICY "users_can_view_own_logs" ON data_access_log
   FOR SELECT TO authenticated
   USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "users_can_insert_audit_logs" ON data_access_log;
 CREATE POLICY "users_can_insert_audit_logs" ON data_access_log
   FOR INSERT TO authenticated
   WITH CHECK (true);
 
 -- Category registry policies
+DROP POLICY IF EXISTS "users_can_read_categories" ON category_registry;
 CREATE POLICY "users_can_read_categories" ON category_registry
   FOR SELECT TO authenticated
   USING (true);
@@ -273,11 +288,13 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
 CREATE TRIGGER update_profiles_updated_at
     BEFORE UPDATE ON profiles
     FOR EACH ROW
     EXECUTE PROCEDURE update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_personal_data_updated_at ON personal_data;
 CREATE TRIGGER update_personal_data_updated_at
     BEFORE UPDATE ON personal_data
     FOR EACH ROW
@@ -973,6 +990,7 @@ $$ LANGUAGE plpgsql;
 -- Note: update_updated_at_column function is already defined above
 -- This duplicate definition has been removed
 
+DROP TRIGGER IF EXISTS update_error_alerts_updated_at ON error_alerts;
 CREATE TRIGGER update_error_alerts_updated_at
     BEFORE UPDATE ON error_alerts
     FOR EACH ROW
@@ -1144,6 +1162,22 @@ INSERT INTO category_registry (
     ARRAY['contacts', 'friends', 'family', 'colleagues', 'people', 'relationships', 'connections', 'network'],
     'Query when user needs contact information, asks about relationships, or discusses people in their network',
     ARRAY['Show my contacts', 'Who do I know?', 'Find contact information', 'My professional network']
+  ),
+  (
+    'documents',
+    'Documents & Files',
+    'Files, papers, records, notes, reports, written materials',
+    ARRAY['documents', 'files', 'papers', 'records', 'notes', 'reports', 'written materials', 'docs', 'pdfs'],
+    'Query when user mentions files, documents, papers, or written records they have',
+    ARRAY['Show my documents', 'Find my files', 'What documents do I have?', 'My saved papers']
+  ),
+  (
+    'preferences',
+    'Preferences & Settings',
+    'Personal preferences, settings, choices, configurations',
+    ARRAY['preferences', 'settings', 'choices', 'options', 'configurations', 'likes', 'dislikes', 'preferred'],
+    'Query when user asks about their preferences, settings, or personal choices',
+    ARRAY['What are my preferences?', 'My settings', 'What do I prefer?', 'My choices']
   )
 ON CONFLICT (category_name) DO UPDATE SET
   display_name = EXCLUDED.display_name,
@@ -1386,6 +1420,7 @@ ON personal_data USING GIN (tags);
 
 
 -- Test data entry for MCP (Model Context Protocol)
+-- Only insert if it doesn't already exist (idempotent)
 INSERT INTO personal_data (
   user_id,
   category,
@@ -1393,11 +1428,17 @@ INSERT INTO personal_data (
   content,
   tags,
   classification
-) VALUES (
+)
+SELECT
   NULL, -- No user ID as requested
   'interests',
   'MCP (Model Context Protocol)',
-  '{"description": "A protocol for enabling AI assistants to securely access external tools and data sources", "type": "technology", "domain": "artificial intelligence", "use_cases": ["data access", "tool integration", "secure AI interactions"], "related_concepts": ["AI agents", "tool calling", "protocol design"]}',
+  '{"description": "A protocol for enabling AI assistants to securely access external tools and data sources", "type": "technology", "domain": "artificial intelligence", "use_cases": ["data access", "tool integration", "secure AI interactions"], "related_concepts": ["AI agents", "tool calling", "protocol design"]}'::JSONB,
   ARRAY['technology', 'protocol', 'ai', 'mcp'],
   'personal'
-) ON CONFLICT DO NOTHING;
+WHERE NOT EXISTS (
+  SELECT 1 FROM personal_data
+  WHERE title = 'MCP (Model Context Protocol)'
+  AND category = 'interests'
+  AND deleted_at IS NULL
+);
