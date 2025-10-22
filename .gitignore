@@ -42,3 +42,5 @@ logs/
 
 # MCP Bridge
 stdio-mcp-bridge.js
+
+repo-rules.json
