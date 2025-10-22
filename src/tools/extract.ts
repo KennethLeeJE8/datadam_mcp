@@ -2,8 +2,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatAsMarkdown, formatAsJSON, formatErrorMessage } from "../utils/formatting.js";
+import { formatErrorMessage, checkAndTruncateResponse } from "../utils/formatting.js";
 import { ExtractInputSchema } from "../schemas/index.js";
+import { CHARACTER_LIMIT } from "../constants.js";
 
 export function registerExtractTool(
   server: McpServer,
@@ -123,33 +124,33 @@ Error Handling:
           };
         }
 
-        // Format response based on response_format parameter
-        if (response_format === 'json') {
-          const responseText = formatAsJSON({
-            results: results,
-            total: results.length,
-            count: results.length,
-            hasMore: results.length === limit,
-            nextOffset: offset + results.length
-          });
+        // Format response with character limit checking
+        const truncationResult = checkAndTruncateResponse(
+          results,
+          CHARACTER_LIMIT,
+          response_format,
+          offset,
+          results.length,
+          results.length === limit,
+          offset + results.length,
+          { showIds: true }
+        );
 
-          return {
-            content: [{
-              type: "text",
-              text: responseText
-            }]
-          };
-        } else {
-          // Markdown format
-          const responseText = formatAsMarkdown(results, { showIds: true });
-
-          return {
-            content: [{
-              type: "text",
-              text: `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${responseText}`
-            }]
-          };
+        // Add extract context to markdown format
+        let finalText = truncationResult.text;
+        if (response_format === 'markdown' && !truncationResult.wasTruncated) {
+          finalText = `Found ${results.length} items with tags [${tags?.join(', ') || 'none'}]:\n\n${truncationResult.text}`;
+        } else if (response_format === 'markdown' && truncationResult.wasTruncated) {
+          // Truncation message already included in truncationResult.text
+          finalText = `Found ${truncationResult.originalCount} items with tags [${tags?.join(', ') || 'none'}] (showing ${truncationResult.truncatedCount}):\n\n${truncationResult.text}`;
         }
+
+        return {
+          content: [{
+            type: "text",
+            text: finalText
+          }]
+        };
       } catch (error) {
         return {
           content: [{
