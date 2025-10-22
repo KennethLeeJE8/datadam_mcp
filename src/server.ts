@@ -203,6 +203,12 @@ Error Handling:
         limit: z.number().min(1).max(100).default(20).describe("Max results. Default: 20, Max: 100"),
         userId: z.string().optional().describe("Optional: User UUID."),
         response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
       }
     },
     async ({ query, categories, tags, classification, limit = 20, userId, response_format = 'markdown' }) => {
@@ -380,6 +386,12 @@ Error Handling:
         userId: z.string().optional().describe("Optional: User UUID."),
         filters: z.record(z.any()).optional().describe("Optional: Additional field-level filters"),
         response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
       }
     },
     async ({ category, tags, userId, filters, limit = 50, offset = 0, response_format = 'markdown' }) => {
@@ -544,6 +556,12 @@ Error Handling:
         classification: z.enum(['personal', 'sensitive', 'confidential']).default('personal').describe("Sensitivity level. Default: 'personal'. Use 'sensitive' for private info, 'confidential' for highly sensitive"),
         userId: z.string().optional().describe("Optional: User UUID."),
         response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
       }
     },
     async ({ category, title, content, tags, classification = 'personal', userId, response_format = 'markdown' }) => {
@@ -649,6 +667,12 @@ Error Handling:
         updates: z.record(z.any()).describe("Fields to update. Only include changed fields. Examples: {content: {email: 'new@email.com'}}, {tags: ['family', 'urgent']}"),
         conversationContext: z.string().optional().describe("Optional: Conversation context for extracting updates"),
         response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
       }
     },
     async ({ recordId, updates, conversationContext, response_format = 'markdown' }) => {
@@ -766,6 +790,12 @@ Error Handling:
         recordIds: z.array(z.string()).min(1).describe("Array of record UUIDs to delete. Obtain from search/extract first. Examples: ['uuid1'], ['uuid1', 'uuid2']. Never show to user."),
         hardDelete: z.boolean().default(false).describe("Permanent deletion flag. Default: false (soft delete, recoverable). Set true ONLY for GDPR compliance. WARNING: Cannot be undone."),
         response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false
       }
     },
     async ({ recordIds, hardDelete = false, response_format = 'markdown' }) => {
