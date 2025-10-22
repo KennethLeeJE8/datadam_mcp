@@ -62,7 +62,7 @@ Error Handling:
         openWorldHint: false
       }
     },
-    async ({ query, categories, tags, classification, limit = 20, userId, response_format = 'markdown' }) => {
+    async ({ query, categories, tags, classification, limit = 20, offset = 0, userId, response_format = 'markdown' }) => {
       try {
         // Remove surrounding quotes if present
         const cleanQuery = query.replace(/^["']|["']$/g, '').trim();
@@ -89,7 +89,7 @@ Error Handling:
           p_tags: (tags && tags.length > 0) ? tags : null,
           p_classification: classification || null,
           p_limit: limit,
-          p_offset: 0
+          p_offset: offset
         });
 
         if (error) {
@@ -126,8 +126,8 @@ Error Handling:
             results: results,
             total: results.length,
             count: results.length,
-            hasMore: false,
-            nextOffset: 0
+            hasMore: results.length === limit,
+            nextOffset: offset + results.length
           });
 
           return {

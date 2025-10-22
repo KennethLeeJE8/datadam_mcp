@@ -26,6 +26,7 @@ export const SearchInputSchema = {
   tags: z.array(z.string()).optional().describe("Optional: Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']"),
   classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Optional: Filter by data sensitivity level"),
   limit: z.number().min(1).max(100).default(20).describe("Max results. Default: 20, Max: 100"),
+  offset: z.number().min(0).default(0).describe("Pagination offset"),
   userId: z.string().optional().describe("Optional: User UUID."),
   response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
 };
