@@ -4,31 +4,35 @@ import { z } from "zod";
 import { availableCategories, allCategories } from "../services/supabase.js";
 
 // Helper function to ensure only active categories are accepted (for search/extract tools)
+// Uses z.lazy() to defer evaluation until validation time (after categories are loaded)
 export const getCategorySchema = () => {
-  const activeCategories = availableCategories;
+  return z.lazy(() => {
+    const activeCategories = availableCategories;
 
-  if (!activeCategories || activeCategories.length === 0) {
-    return z.string().refine(() => false, {
-      message: "No active categories available. Refresh categories before using this tool."
-    }).describe("Active category. Must match one of the categories currently enabled in Supabase.");
-  }
+    if (!activeCategories || activeCategories.length === 0) {
+      return z.string().refine(() => false, {
+        message: "No active categories available. Refresh categories before using this tool."
+      });
+    }
 
-  return z.enum(activeCategories as [string, ...string[]])
-    .describe(`Active category. Must match one of the categories currently enabled in Supabase. Available: ${activeCategories.join(', ')}`);
+    return z.enum(activeCategories as [string, ...string[]]);
+  }).describe(`Active category. Must match one of the categories currently enabled in Supabase. Available: ${availableCategories.join(', ') || 'loading...'}`);
 };
 
 // Helper function to accept any category from registry (for create tool)
+// Uses z.lazy() to defer evaluation until validation time (after categories are loaded)
 export const getCreateCategorySchema = () => {
-  const registryCategories = allCategories;
+  return z.lazy(() => {
+    const registryCategories = allCategories;
 
-  if (!registryCategories || registryCategories.length === 0) {
-    return z.string().refine(() => false, {
-      message: "No categories available in registry. Please check database configuration."
-    }).describe("Category from registry. Must match one of the categories in the category_registry table.");
-  }
+    if (!registryCategories || registryCategories.length === 0) {
+      return z.string().refine(() => false, {
+        message: "No categories available in registry. Please check database configuration."
+      });
+    }
 
-  return z.enum(registryCategories as [string, ...string[]])
-    .describe(`Category from registry. Must match one of the categories in the category_registry table. Available: ${registryCategories.join(', ')}`);
+    return z.enum(registryCategories as [string, ...string[]]);
+  }).describe(`Category from registry. Must match one of the categories in the category_registry table. Available: ${allCategories.join(', ') || 'loading...'}`);
 };
 
 // Search Personal Data Input Schema
