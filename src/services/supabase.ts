@@ -6,6 +6,7 @@ import type { Category } from "../types.js";
 
 export let supabase: SupabaseClient;
 export let availableCategories: string[] = [];
+export let allCategories: string[] = [];
 
 export async function fetchAvailableCategories(): Promise<string[]> {
   try {
@@ -17,6 +18,24 @@ export async function fetchAvailableCategories(): Promise<string[]> {
     return categories?.map((cat: Category) => cat.category_name) || [];
   } catch (error) {
     console.error("Failed to fetch categories:", error);
+    return [];
+  }
+}
+
+export async function fetchAllCategories(): Promise<string[]> {
+  try {
+    const { data: categories, error } = await supabase
+      .from('category_registry')
+      .select('category_name')
+      .order('display_name');
+
+    if (error) {
+      console.error("Error fetching all categories:", error);
+      return [];
+    }
+    return categories?.map((cat: { category_name: string }) => cat.category_name) || [];
+  } catch (error) {
+    console.error("Failed to fetch all categories:", error);
     return [];
   }
 }
@@ -34,7 +53,9 @@ export async function initializeDatabase(): Promise<void> {
 
     // Fetch initial categories
     availableCategories = await fetchAvailableCategories();
-    console.log("Available categories:", availableCategories);
+    allCategories = await fetchAllCategories();
+    console.log("Available categories (active):", availableCategories);
+    console.log("All categories (registry):", allCategories);
 
     // Test the connection by fetching category stats
     const { data, error } = await supabase.rpc('get_category_stats');

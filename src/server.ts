@@ -1,7 +1,7 @@
 // MCP Server factory functions
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { supabase, availableCategories, fetchAvailableCategories } from "./services/supabase.js";
+import { supabase, availableCategories, allCategories, fetchAvailableCategories } from "./services/supabase.js";
 import { registerCategoriesResource } from "./resources/categories.js";
 import { registerSearchTool } from "./tools/search.js";
 import { registerExtractTool } from "./tools/extract.js";
@@ -24,7 +24,7 @@ export function createMcpServer(): McpServer {
   // Register all tools
   registerSearchTool(server, supabase, availableCategories);
   registerExtractTool(server, supabase, availableCategories, fetchAvailableCategories);
-  registerCreateTool(server, supabase, availableCategories);
+  registerCreateTool(server, supabase, allCategories);
   registerUpdateTool(server, supabase);
   registerDeleteTool(server, supabase);
 

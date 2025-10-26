@@ -8,7 +8,7 @@ import { CreateInputSchema } from "../schemas/index.js";
 export function registerCreateTool(
   server: McpServer,
   supabase: SupabaseClient,
-  availableCategories: string[]
+  allCategories: string[]
 ): void {
   server.registerTool(
     "datadam_create_personal_data",
@@ -37,10 +37,10 @@ CATEGORY SELECTION:
 - Preference/choice/opinion/like/dislike → preferences
 - File/document/paper → documents
 
-AVAILABLE CATEGORIES: ${availableCategories.length > 0 ? availableCategories.join(', ') : 'Categories will be available once data is added'}
+AVAILABLE CATEGORIES (All from registry, including inactive): ${allCategories.length > 0 ? allCategories.join(', ') : 'Categories will be available once added to category_registry'}
 
 Args:
-  - category (string, required): Valid category name. Available categories: ${availableCategories.length > 0 ? availableCategories.join(', ') : 'none yet'}
+  - category (string, required): Valid category name from category_registry table. Can use any category (active or inactive). Available: ${allCategories.length > 0 ? allCategories.join(', ') : 'none yet'}
   - title (string, required): Descriptive title for the record. Examples: 'John Smith - Work Contact', 'Current Location'
   - content (object, required): Structured attributes as JSON key-value pairs. Keep concise - attributes only, NOT explanations
   - tags (string[], optional): Tags in singular form. Examples: ['family'], ['work'], ['favorite']
