@@ -31,9 +31,11 @@ WHEN NOT TO USE:
 
 TRIGGER KEYWORDS: "find [specific]", "search [name]", "what's [detail]", "who is", "lookup", "get [specific info]", "tell me about [specific thing]"
 
+AVAILABLE CATEGORIES: ${availableCategories.length > 0 ? availableCategories.join(', ') : 'Categories will be available once data is added'}
+
 Args:
   - query (string, required): Specific search term, name, or datapoint to find
-  - categories (string[], optional): Narrow search to specific categories. Examples: ['contacts'], ['books', 'documents']
+  - categories (string[], optional): Narrow search to specific active categories. Examples: ['contacts'], ['books', 'documents']
   - tags (string[], optional): Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']
   - classification (enum, optional): Filter by sensitivity - 'public', 'personal', 'sensitive', or 'confidential'
   - limit (number, optional): Max results. Range: 1-100, Default: 20
@@ -54,7 +56,7 @@ Examples:
 Error Handling:
   - No results: Returns "No results found matching '<query>'" with suggestions (try broader terms, check spelling, use datadam_extract_personal_data)
   - Database errors: Returns error message with connection troubleshooting guidance
-  - Invalid category: Ignores invalid categories, searches remaining valid ones`,
+  - Invalid category: Request will be rejected during schema validation with error showing valid active categories`,
       inputSchema: SearchInputSchema,
       annotations: {
         readOnlyHint: true,

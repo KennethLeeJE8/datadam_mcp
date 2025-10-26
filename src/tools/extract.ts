@@ -32,10 +32,10 @@ WHEN NOT TO USE:
 
 TRIGGER KEYWORDS: "all my [category]", "my [category]", "list my", "show me my", "what [category] do I have", "[tag] [category]", "browse my"
 
-ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+AVAILABLE CATEGORIES: ${availableCategories.length > 0 ? availableCategories.join(', ') : 'Categories will be available once data is added'}
 
 Args:
-  - category (string, required): Exact category name. Available: contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+  - category (string, required): Exact category name. Available categories: ${availableCategories.length > 0 ? availableCategories.join(', ') : 'none yet'}
   - tags (string[], optional): Filter within category by tags. Singular forms only. Examples: ['family'], ['work'], ['sci-fi']
   - limit (number, optional): Results per page. Range: 1-100, Default: 50
   - offset (number, optional): Pagination offset for browsing large result sets. Default: 0

@@ -7,7 +7,8 @@ import { CreateInputSchema } from "../schemas/index.js";
 
 export function registerCreateTool(
   server: McpServer,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  availableCategories: string[]
 ): void {
   server.registerTool(
     "datadam_create_personal_data",
@@ -27,7 +28,7 @@ TRIGGERS (indicating personal data is being shared):
 - Opinions/preferences: "I think...", "I believe...", "I feel..." (when about personal preferences)
 - Activities: "I [verb] at [place]", "I [verb] with [person]", "I [verb] [activity]"
 
-CATEGORY SELECTION (must use one of the allowed categories):
+CATEGORY SELECTION:
 - Email/phone/person/relationship → contacts
 - Book/reading/author → books or favorite_authors
 - Tool/tech/app/software/platform → digital_products
@@ -36,10 +37,10 @@ CATEGORY SELECTION (must use one of the allowed categories):
 - Preference/choice/opinion/like/dislike → preferences
 - File/document/paper → documents
 
-ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, basic_information, digital_products, documents, preferences
+AVAILABLE CATEGORIES: ${availableCategories.length > 0 ? availableCategories.join(', ') : 'Categories will be available once data is added'}
 
 Args:
-  - category (string, required): One of the allowed categories above
+  - category (string, required): Valid category name. Available categories: ${availableCategories.length > 0 ? availableCategories.join(', ') : 'none yet'}
   - title (string, required): Descriptive title for the record. Examples: 'John Smith - Work Contact', 'Current Location'
   - content (object, required): Structured attributes as JSON key-value pairs. Keep concise - attributes only, NOT explanations
   - tags (string[], optional): Tags in singular form. Examples: ['family'], ['work'], ['favorite']

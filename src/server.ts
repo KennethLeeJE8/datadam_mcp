@@ -24,7 +24,7 @@ export function createMcpServer(): McpServer {
   // Register all tools
   registerSearchTool(server, supabase, availableCategories);
   registerExtractTool(server, supabase, availableCategories, fetchAvailableCategories);
-  registerCreateTool(server, supabase);
+  registerCreateTool(server, supabase, availableCategories);
   registerUpdateTool(server, supabase);
   registerDeleteTool(server, supabase);
 

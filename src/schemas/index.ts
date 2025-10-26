@@ -3,26 +3,43 @@
 import { z } from "zod";
 import { availableCategories } from "../services/supabase.js";
 
-// Helper function to create category schema dynamically
-export const getCategorySchema = () => {
-  if (availableCategories.length > 0) {
-    // Use enum when categories are available for better UI experience
-    return z.enum(availableCategories as [string, ...string[]]).describe(
-      `Category to filter by. Available: ${availableCategories.join(', ')}`
-    );
-  } else {
-    // Fallback to fixed set when database not loaded
-    return z.enum([
-      "contacts", "books", "favorite_authors", "interests",
-      "basic_information", "digital_products", "documents", "preferences"
-    ] as [string, ...string[]]).describe("Category to filter by");
-  }
-};
+// Helper function to ensure only active categories are accepted
+export const getCategorySchema = () =>
+  z
+    .string()
+    .min(1, "Category must not be empty")
+    .superRefine((value, ctx) => {
+      const activeCategories = availableCategories;
+
+      if (!activeCategories || activeCategories.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "No active categories available. Refresh categories before using this tool.",
+        });
+        return;
+      }
+
+      if (!activeCategories.includes(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid category "${value}". Active categories: ${activeCategories.join(
+            ", "
+          )}`,
+        });
+      }
+    })
+    .describe("Active category. Must match one of the categories currently enabled in Supabase.");
 
 // Search Personal Data Input Schema
 export const SearchInputSchema = {
   query: z.string().describe("Specific search term, name, or datapoint to find. Must be concrete reference. Examples: 'John email', 'passport', 'TypeScript', 'Matt Ridley', 'Boston address'"),
-  categories: z.array(z.string()).optional().describe("Optional: Narrow search to specific categories if known. Examples: ['contacts'], ['books', 'documents']. Leave empty to search all."),
+  categories: z
+    .array(getCategorySchema())
+    .optional()
+    .describe(
+      "Optional: Narrow search to specific active categories. Examples: ['contacts'], ['books', 'documents']. Leave empty to search all."
+    ),
   tags: z.array(z.string()).optional().describe("Optional: Filter by tags. Use singular form. Examples: ['family'], ['work', 'urgent']"),
   classification: z.enum(['public', 'personal', 'sensitive', 'confidential']).optional().describe("Optional: Filter by data sensitivity level"),
   limit: z.number().min(1).max(100).default(20).describe("Max results. Default: 20, Max: 100"),
