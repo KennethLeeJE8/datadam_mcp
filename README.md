@@ -4,6 +4,133 @@ DataDam is a Model Context Protocol (MCP) server backed by Supabase. It supports
 
 Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
+## 🚀 Quick Links
+
+- **[Quickstart Setup](#quickstart)** - Get started in minutes
+- **[Client Configuration](#client-configuration-examples)** - Connect your AI tool (Claude, ChatGPT, Cursor, etc.)
+- **[Tool Details](#tool-details)** - Learn how to use each tool
+- **[Troubleshooting](#troubleshooting)** - Common issues and solutions
+
+---
+
+## How to Use DataDam
+
+**The Problem:** Your AI forgets everything between conversations. You waste 10-20 minutes every time re-explaining context that should already be known.
+
+**The Solution:** DataDam is a **persistent memory layer** that decouples your personal information from your AI tool's unstable memory. Mention something once, and it's remembered forever across all conversations.
+
+---
+
+### Example 1: Book Recommendations
+
+**❌ WITHOUT DataDam:**
+```
+You: "Recommend a book for me?"
+
+AI: "What genres do you like? What have you read? Any favorite authors?"
+
+You: "I like sci-fi, I've read Project Hail Mary, The Martian, Children of Time,
+     Ender's Game... I prefer hard sci-fi with good character development, nothing
+     too militaristic, I read about 50 books a year so I've probably read most
+     popular ones..."
+
+[15 minutes of typing the same preferences you've typed 20 times before]
+```
+
+**✅ WITH DataDam:**
+```
+You: "Recommend a book for me?"
+
+AI: [Automatically retrieves: 50+ books you've read, favorite genres (hard sci-fi),
+    preferred themes (character development), dislikes (militaristic), reading pace]
+
+    "Based on your love of hard sci-fi like Project Hail Mary and your preference
+    for character-driven stories, try 'A Memory Called Empire' by Arkady Martine.
+    It's got the political intrigue of Dune with deep character development,
+    and you haven't read it yet."
+
+You: [0 minutes of setup. Instant, personalized answer.]
+```
+
+**Time saved:** 15 minutes → 0 minutes
+
+---
+
+### Example 2: Travel Planning
+
+**❌ WITHOUT DataDam:**
+```
+You: "Help me plan a trip to Japan"
+
+AI: "Great! What's your travel style? Budget? Dietary restrictions?
+     Physical limitations? Preferred activities?"
+
+You: "I'm vegetarian with shellfish allergy, prefer boutique hotels around
+     $200/night, I have a knee injury so nothing too strenuous, I love
+     historical sites and temples, I prefer shoulder seasons..."
+
+[20 minutes re-explaining details you've shared in 10 previous conversations]
+```
+
+**✅ WITH DataDam:**
+```
+You: "Help me plan a trip to Japan"
+
+AI: [Automatically retrieves: vegetarian + shellfish allergy, $200/night budget,
+    knee injury, loves temples/historical sites, prefers shoulder seasons]
+
+    "Perfect! I'm thinking late April (shoulder season). I'll focus on:
+    - Kyoto temples (you'll love them based on your Thailand temple experience)
+    - Boutique ryokans around ¥25,000/night (your $200 budget)
+    - Knee-friendly itinerary with rest days between heavy walking
+    - Restaurants with vegetarian options + no shellfish risk
+
+    Sound good?"
+
+You: [0 minutes explaining. Your AI already knows your constraints.]
+```
+
+**Time saved:** 20 minutes → 0 minutes
+
+---
+
+### The Core Difference
+
+| Without DataDam | With DataDam |
+|----------------|--------------|
+| ❌ Repeat yourself every conversation | ✅ Mention once, remember forever |
+| ❌ 10-20 min setup per conversation | ✅ 0 min setup, instant context |
+| ❌ Memory resets when chat resets | ✅ Persistent memory across all chats |
+| ❌ Context lost when switching AI tools | ✅ Same context across all AI tools |
+| ❌ Generic, one-size-fits-all responses | ✅ Deeply personalized responses |
+
+---
+
+### How It Works
+
+Just **talk naturally** - DataDam works invisibly in the background:
+
+1. **First mention:** "My friend Sarah works at Microsoft (sarah.chen@microsoft.com)"
+   → DataDam proactively stores this in `contacts`
+
+2. **Weeks later:** "Email my Microsoft friend, Sarah, about the project"
+   → DataDam retrieves Sarah's info automatically
+
+3. **No commands needed** - Your AI handles all the storage and retrieval
+
+### Available Categories
+
+- **contacts** - People, emails, relationships
+- **books** - Reading history and preferences
+- **interests** - Hobbies, skills, topics you care about
+- **digital_products** - Tools and technologies you use
+- **basic_information** - Personal details and background
+- **favorite_authors** - Authors you love
+
+This is based off of personal interests and use, feel free to suggest categories to add.
+
+---
+
 ## Tools Overview
 
 - How it works
@@ -85,9 +212,7 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 - **Important**: Remember your password - you'll need it for the database connection later
 - Create a new project and wait for it to finish setting up
 
-**2.** Load the database schema (choose preferred option):
-
-**Option 2a)** Using Supabase SQL Editor:
+**2.** Load the database schema in Supabase SQL Editor:
 - Copy the entire contents of [src/database/schema.sql](./src/database/schema.sql) 
 - Supabase Dashboard → SQL Editor → New query
 - Paste the copied schema code into the editor
@@ -99,14 +224,14 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 
 ### **Choose Your Connection Type**
 
-Select the connection method based on your AI tool:
+Select the connection method based on your AI tools and subscription tiers:
 
 - **Option A: Stdio (Standard Input/Output)**
   - Use for: Coding agents (Cursor, Windsurf, etc.), Claude Desktop (Free tier)
   - Next step: Continue to [Local Testing](#local-testing) section below
 
 - **Option B: HTTP Streamable**
-  - Use for: ChatGPT Plus or higher, Claude Pro or higher
+  - Use for: ChatGPT Plus or higher, Claude Pro or higher, Coding agents (Cursor, Windsurf, etc.)
   - Next step: Skip to [Render Deployment](#render-deployment-only-for-streamable-http-server) section
 
 ### **Local Testing**
@@ -140,7 +265,7 @@ Select the connection method based on your AI tool:
 
 Feel free to use any hosting platform, this is personal preference.
 
-**1.** Go to [Render Dashboard](https://dashboard.render.com) and click **New > Web Service**
+**1.** Go to [Render Dashboard](https://dashboard.render.com/register), register and click **New > Web Service**
 
 **2.** Choose **"Build and deploy from a Git repository"** and click **Next**
 
