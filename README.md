@@ -265,25 +265,17 @@ Select the connection method based on your AI tools and subscription tiers:
 
 Feel free to use any hosting platform, this is personal preference.
 
-**1.** Go to [Render Dashboard](https://dashboard.render.com/register), register and click **New > Web Service**
+**1.** Create a Render account at [Render](https://dashboard.render.com/register) or sign in if you have an existing account
 
-**2.** Choose **"Build and deploy from a Git repository"** and click **Next**
 
-**3.** Connect to the public GitHub repository:
-   - Repository URL: `https://github.com/KennethLeeJE8/datadam_mcp.git`
-   - Branch: `main`
+**2.** [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/KennethLeeJE8/datadam_mcp)
 
-**4.** The `render.yaml` file automatically configures most settings (name, runtime, build/start commands, root directory, etc.)
+You'll be prompted to fill in the required environment variables:
+- Ensure that branch is `main`
+- `SUPABASE_URL` - Get from: Supabase Dashboard → Project Settings → API → Project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Get from: Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
 
-**5.** Fill in the environment variables in the **Advanced** section:
-   - `SUPABASE_URL` - Get from: Supabase Dashboard → Project Settings → API → Project URL
-   - `SUPABASE_SERVICE_ROLE_KEY` - Get from: Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
-
-**6.** Click **Create Web Service** to deploy
-
-**Notes:**
-- Health check path is automatically set to `/health` via render.yaml
-- Free tier can hit limits; use Standard tier for reliable uptime
+Ensure that the environment variables are filled out correctly, otherwise the deployment will fail. 
 
 ### **Verify HTTP Connections**
 - Health endpoint: `curl http://{render_url}/health`
