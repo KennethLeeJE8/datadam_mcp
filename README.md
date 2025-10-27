@@ -19,6 +19,18 @@ Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
 **The Solution:** DataDam is a **persistent memory layer** that decouples your personal information from your AI tool's unstable memory. Mention something once, and it's remembered forever across all conversations.
 
+### How It Works
+
+Just **talk naturally** - DataDam works invisibly in the background, consulting you for consent:
+
+1. **First mention:** "I'm using TypeScript with Express for my API project"
+   → DataDam proactively stores this in `digital_products`
+
+2. **Weeks later:** "Help me debug this API error"
+   → DataDam retrieves your tech stack (TypeScript, Express) automatically
+
+3. **No commands needed** - Your AI handles all the storage and retrieval
+
 ---
 
 ### Example 1: Book Recommendations
@@ -31,7 +43,7 @@ AI: "What genres do you like? What have you read? Any favorite authors?"
 
 You: "I like sci-fi, I've read Project Hail Mary, The Martian, Children of Time,
      Ender's Game... I prefer hard sci-fi with good character development, nothing
-     too militaristic, I read about 50 books a year so I've probably read most
+     too violent, I read about 50 books a year so I've probably read most
      popular ones..."
 
 [15 minutes of typing the same preferences you've typed 20 times before]
@@ -42,7 +54,7 @@ You: "I like sci-fi, I've read Project Hail Mary, The Martian, Children of Time,
 You: "Recommend a book for me?"
 
 AI: [Automatically retrieves: 50+ books you've read, favorite genres (hard sci-fi),
-    preferred themes (character development), dislikes (militaristic), reading pace]
+    preferred themes (character development), dislikes (non-fiction books, violence), reading pace]
 
     "Based on your love of hard sci-fi like Project Hail Mary and your preference
     for character-driven stories, try 'A Memory Called Empire' by Arkady Martine.
@@ -56,41 +68,41 @@ You: [0 minutes of setup. Instant, personalized answer.]
 
 ---
 
-### Example 2: Travel Planning
+### Example 2: Tech Stack Recommendations
 
 **❌ WITHOUT DataDam:**
 ```
-You: "Help me plan a trip to Japan"
+You: "How should I add authentication to my API?"
 
-AI: "Great! What's your travel style? Budget? Dietary restrictions?
-     Physical limitations? Preferred activities?"
+AI: "I can help! What's your tech stack? What database are you using?
+     What framework? Are you using TypeScript or JavaScript?"
 
-You: "I'm vegetarian with shellfish allergy, prefer boutique hotels around
-     $200/night, I have a knee injury so nothing too strenuous, I love
-     historical sites and temples, I prefer shoulder seasons..."
+You: "I'm using Node.js with Express and TypeScript, Supabase for the database
+     which is PostgreSQL, I deploy on Render, I use Zod for validation,
+     I prefer minimal dependencies, I'm working on an MCP server..."
 
-[20 minutes re-explaining details you've shared in 10 previous conversations]
+[15 minutes re-explaining your entire tech stack for the hundredth time]
 ```
 
 **✅ WITH DataDam:**
 ```
-You: "Help me plan a trip to Japan"
+You: "How should I add authentication to my API?"
 
-AI: [Automatically retrieves: vegetarian + shellfish allergy, $200/night budget,
-    knee injury, loves temples/historical sites, prefers shoulder seasons]
+AI: [Automatically retrieves: TypeScript, Node.js, Express, Supabase (PostgreSQL),
+    Render deployment, Zod validation, MCP development focus]
 
-    "Perfect! I'm thinking late April (shoulder season). I'll focus on:
-    - Kyoto temples (you'll love them based on your Thailand temple experience)
-    - Boutique ryokans around ¥25,000/night (your $200 budget)
-    - Knee-friendly itinerary with rest days between heavy walking
-    - Restaurants with vegetarian options + no shellfish risk
+    "For your Express + TypeScript + Supabase stack, I recommend:
+    - Use Supabase Auth (already integrated with your PostgreSQL database)
+    - Add a middleware with Zod validation for JWT tokens
+    - Keep it minimal (matches your preference)
+    - Deploy config already works with your Render setup
 
-    Sound good?"
+    Here's the implementation..."
 
-You: [0 minutes explaining. Your AI already knows your constraints.]
+You: [0 minutes explaining. Instant, stack-specific solution.]
 ```
 
-**Time saved:** 20 minutes → 0 minutes
+**Time saved:** 15 minutes → 0 minutes
 
 ---
 
@@ -105,18 +117,6 @@ You: [0 minutes explaining. Your AI already knows your constraints.]
 | ❌ Generic, one-size-fits-all responses | ✅ Deeply personalized responses |
 
 ---
-
-### How It Works
-
-Just **talk naturally** - DataDam works invisibly in the background:
-
-1. **First mention:** "My friend Sarah works at Microsoft (sarah.chen@microsoft.com)"
-   → DataDam proactively stores this in `contacts`
-
-2. **Weeks later:** "Email my Microsoft friend, Sarah, about the project"
-   → DataDam retrieves Sarah's info automatically
-
-3. **No commands needed** - Your AI handles all the storage and retrieval
 
 ### Available Categories
 
@@ -306,10 +306,9 @@ Claude Desktop (Custom Connector)
 - Name: `dataDam`
 - Type: HTTP
 - URL: `https://<YOUR_RENDER_URL>/mcp`
-- No local `.env` needed; the server reads credentials from Render.
 
 ChatGPT (Connectors / Deep Research)
-- **Note**: ChatGPT only supports HTTP connections, not stdio
+- **Note**: ChatGPT only supports HTTP connections
 - **Requirement**: Custom connectors require ChatGPT Pro, Business, Enterprise, or Edu subscription
 - Enable Developer Mode in Settings → Connectors → Advanced → Developer mode.
 - Add a custom MCP server using the ChatGPT endpoint:
@@ -429,6 +428,7 @@ You can add categories in the category_resgistry table and it will dynamically u
 
 - datadam_create_personal_data
   - Purpose: Store a new record.
+  - **IMPORTANT**: Create ONE entry per entity. If storing 2 books, make 2 separate tool calls. If storing 3 contacts, make 3 separate tool calls. Never batch multiple entities into one record.
   - Args: `category` (required string); `title` (required string); `content` (required object/JSON); `tags?` string[]; `classification?` (default `personal`); `userId?` string (UUID).
   - Example:
     ```json
@@ -501,6 +501,13 @@ If you want to scope data to specific users, you can set up user authentication 
 
 - Empty categories/data
   - Insert data; run `select * from get_active_categories();`
+
+- Categories not updating after adding new category
+  - Categories are loaded when the MCP connection is established
+  - After adding a new category to the `category_registry` table, restart your AI client to establish a new connection
+  - For Claude Desktop: Restart the application
+  - For Cursor/coding agents: Reload the window or restart the editor
+  - For HTTP connections: The client will reconnect on next request
 
 - Client cannot connect
   - Use the `…/mcp` URL (or `…/chatgpt_mcp` for ChatGPT)
