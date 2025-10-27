@@ -31,6 +31,8 @@ Just **talk naturally** - DataDam works invisibly in the background, consulting 
 
 3. **No commands needed** - Your AI handles all the storage and retrieval
 
+**💡 Tip:** If a datapoint you mentioned doesn't save automatically, explicitly tell the AI to save it (e.g., "save that to my interests"). The AI's ability to proactively capture information will improve over time.
+
 ---
 
 ### Example 1: Book Recommendations
