@@ -301,6 +301,9 @@ Protocol: MCP over HTTP</code></pre>
           <h3>3. create-personal-data</h3>
           <p><strong>Purpose:</strong> Capture and store personal data (aggressive capture mode)</p>
           <p><strong>When to use:</strong> User shares personal info like "my email is x@y.com" or "I live in Boston"</p>
+          <div class="note">
+            <strong>CRITICAL:</strong> Create ONE entry per entity. Storing 2 books? Make 2 SEPARATE tool calls (one per book). Storing 3 contacts? Make 3 SEPARATE tool calls (one per contact). NEVER batch multiple entities into one record.
+          </div>
           <p><strong>Parameters:</strong></p>
           <ul>
             <li><code>category</code> (required): Data category</li>

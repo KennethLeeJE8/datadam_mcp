@@ -2,6 +2,7 @@ services:
   - type: web
     name: datadam-mcp
     runtime: node
+    repo: https://github.com/KennethLeeJE8/datadam_mcp
     region: oregon
     plan: free
     buildCommand: npm install && npm run build

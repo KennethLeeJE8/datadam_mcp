@@ -351,6 +351,12 @@ ALLOWED CATEGORIES (fixed set): contacts, books, favorite_authors, interests, ba
       title: "Store New Personal Data",
       description: `Capture and store personal data when user shares information. AGGRESSIVE CAPTURE MODE: Trigger when user mentions personal details, even without explicit "save" command.
 
+CRITICAL: CREATE ONE ENTRY PER ENTITY
+- Storing 2 books? Make 2 SEPARATE tool calls (one per book)
+- Storing 3 contacts? Make 3 SEPARATE tool calls (one per contact)
+- NEVER batch multiple entities into one record
+- Each entity must have its own dedicated entry with unique title and content
+
 EXPLICIT TRIGGERS (100% confidence):
 - "save this", "remember that", "store my", "add to my", "keep this", "note that", "record this"
 

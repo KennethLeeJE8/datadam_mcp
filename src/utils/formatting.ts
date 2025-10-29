@@ -175,3 +175,91 @@ export function formatErrorMessage(
   }
   return output;
 }
+
+export interface TruncationResult {
+  text: string;
+  wasTruncated: boolean;
+  originalCount: number;
+  truncatedCount: number;
+  totalCount?: number;
+  hasMore?: boolean;
+  nextOffset?: number;
+}
+
+/**
+ * Checks if response exceeds character limit and truncates if necessary
+ */
+export function checkAndTruncateResponse(
+  results: PersonalDataRecord[],
+  characterLimit: number,
+  responseFormat: 'json' | 'markdown',
+  offset: number,
+  total?: number,
+  hasMore?: boolean,
+  nextOffset?: number,
+  formatOptions?: FormattingOptions
+): TruncationResult {
+  const originalCount = results.length;
+
+  // First try with all results
+  let responseText: string;
+  if (responseFormat === 'json') {
+    responseText = formatAsJSON({
+      results: results,
+      total: total || results.length,
+      count: results.length,
+      hasMore: hasMore || false,
+      nextOffset: nextOffset || 0
+    });
+  } else {
+    responseText = formatAsMarkdown(results, formatOptions);
+  }
+
+  // If within limit, return as-is
+  if (responseText.length <= characterLimit) {
+    return {
+      text: responseText,
+      wasTruncated: false,
+      originalCount,
+      truncatedCount: originalCount,
+      totalCount: total,
+      hasMore,
+      nextOffset
+    };
+  }
+
+  // Need to truncate - iteratively reduce records
+  let truncatedResults = results;
+  let truncatedCount = originalCount;
+
+  // Start with half, then keep halving until we fit or reach 1 record
+  while (truncatedCount > 1 && responseText.length > characterLimit) {
+    truncatedCount = Math.max(1, Math.floor(truncatedCount / 2));
+    truncatedResults = results.slice(0, truncatedCount);
+
+    if (responseFormat === 'json') {
+      responseText = formatAsJSON({
+        results: truncatedResults,
+        total: total || results.length,
+        count: truncatedCount,
+        hasMore: true,
+        nextOffset: offset + truncatedCount,
+        truncated: true,
+        truncationMessage: `Response truncated from ${originalCount} to ${truncatedCount} records due to ${characterLimit} character limit. Use 'offset=${offset + truncatedCount}', add filters, or narrow categories to see more.`
+      });
+    } else {
+      const markdownResults = formatAsMarkdown(truncatedResults, formatOptions);
+      responseText = `${markdownResults}\n\n⚠️ **Response Truncated**: Showing ${truncatedCount}/${originalCount} records (reduced due to ${characterLimit} char limit). Use offset=${offset + truncatedCount}, add filters, or narrow your search to see more.`;
+    }
+  }
+
+  return {
+    text: responseText,
+    wasTruncated: true,
+    originalCount,
+    truncatedCount,
+    totalCount: total,
+    hasMore: true,
+    nextOffset: offset + truncatedCount
+  };
+}

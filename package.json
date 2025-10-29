@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "ts-node src/server.ts",
+    "start": "dotenv -e .env -- node dist/index.js",
+    "dev": "dotenv -e .env -- ts-node src/index.ts",
     "inspector:stdio": "dotenv -e .env -- npx @modelcontextprotocol/inspector --config inspector-config.json --server datadam",
     "inspector:http": "npm run start & npx @modelcontextprotocol/inspector --transport http --server-url http://localhost:3000/mcp",
     "test": "echo \"Error: no test specified\" && exit 1"

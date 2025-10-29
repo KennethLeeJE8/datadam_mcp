@@ -4,6 +4,135 @@ DataDam is a Model Context Protocol (MCP) server backed by Supabase. It supports
 
 Important: There is no auth yet. Do not store sensitive data. OAuth is planned.
 
+## 🚀 Quick Links
+
+- **[Quickstart Setup](#quickstart)** - Get started in minutes
+- **[Client Configuration](#client-configuration-examples)** - Connect your AI tool (Claude, ChatGPT, Cursor, etc.)
+- **[Tool Details](#tool-details)** - Learn how to use each tool
+- **[Troubleshooting](#troubleshooting)** - Common issues and solutions
+
+---
+
+## How to Use DataDam
+
+**The Problem:** Your AI forgets everything between conversations. You waste 10-20 minutes every time re-explaining context that should already be known.
+
+**The Solution:** DataDam is a **persistent memory layer** that decouples your personal information from your AI tool's unstable memory. Mention something once, and it's remembered forever across all conversations.
+
+### How It Works
+
+Just **talk naturally** - DataDam works invisibly in the background, consulting you for consent:
+
+1. **First mention:** "I'm using TypeScript with Express for my API project"
+   → DataDam proactively stores this in `digital_products`
+
+2. **Weeks later:** "Help me debug this API error"
+   → DataDam retrieves your tech stack (TypeScript, Express) automatically
+
+3. **No commands needed** - Your AI handles all the storage and retrieval
+
+**💡 Tip:** If a datapoint you mentioned doesn't save automatically, explicitly tell the AI to save it (e.g., "save that to my interests"). The AI's ability to proactively capture information will improve over time.
+
+---
+
+### Example 1: Book Recommendations
+
+**❌ WITHOUT DataDam:**
+```
+You: "Recommend a book for me?"
+
+AI: "What genres do you like? What have you read? Any favorite authors?"
+
+You: "I like sci-fi, I've read Project Hail Mary, The Martian, Children of Time,
+     Ender's Game... I prefer hard sci-fi with good character development, nothing
+     too violent, I read about 50 books a year so I've probably read most
+     popular ones..."
+
+[15 minutes of typing the same preferences you've typed 20 times before]
+```
+
+**✅ WITH DataDam:**
+```
+You: "Recommend a book for me?"
+
+AI: [Automatically retrieves: 50+ books you've read, favorite genres (hard sci-fi),
+    preferred themes (character development), dislikes (non-fiction books, violence), reading pace]
+
+    "Based on your love of hard sci-fi like Project Hail Mary and your preference
+    for character-driven stories, try 'A Memory Called Empire' by Arkady Martine.
+    It's got the political intrigue of Dune with deep character development,
+    and you haven't read it yet."
+
+You: [0 minutes of setup. Instant, personalized answer.]
+```
+
+**Time saved:** 15 minutes → 0 minutes
+
+---
+
+### Example 2: Tech Stack Recommendations
+
+**❌ WITHOUT DataDam:**
+```
+You: "How should I add authentication to my API?"
+
+AI: "I can help! What's your tech stack? What database are you using?
+     What framework? Are you using TypeScript or JavaScript?"
+
+You: "I'm using Node.js with Express and TypeScript, Supabase for the database
+     which is PostgreSQL, I deploy on Render, I use Zod for validation,
+     I prefer minimal dependencies, I'm working on an MCP server..."
+
+[15 minutes re-explaining your entire tech stack for the hundredth time]
+```
+
+**✅ WITH DataDam:**
+```
+You: "How should I add authentication to my API?"
+
+AI: [Automatically retrieves: TypeScript, Node.js, Express, Supabase (PostgreSQL),
+    Render deployment, Zod validation, MCP development focus]
+
+    "For your Express + TypeScript + Supabase stack, I recommend:
+    - Use Supabase Auth (already integrated with your PostgreSQL database)
+    - Add a middleware with Zod validation for JWT tokens
+    - Keep it minimal (matches your preference)
+    - Deploy config already works with your Render setup
+
+    Here's the implementation..."
+
+You: [0 minutes explaining. Instant, stack-specific solution.]
+```
+
+**Time saved:** 15 minutes → 0 minutes
+
+---
+
+### The Core Difference
+
+| Without DataDam | With DataDam |
+|----------------|--------------|
+| ❌ Repeat yourself every conversation | ✅ Mention once, remember forever |
+| ❌ 10-20 min setup per conversation | ✅ 0 min setup, instant context |
+| ❌ Memory resets when chat resets | ✅ Persistent memory across all chats |
+| ❌ Context lost when switching AI tools | ✅ Same context across all AI tools |
+| ❌ Generic, one-size-fits-all responses | ✅ Deeply personalized responses |
+
+---
+
+### Available Categories
+
+- **contacts** - People, emails, relationships
+- **books** - Reading history and preferences
+- **interests** - Hobbies, skills, topics you care about
+- **digital_products** - Tools and technologies you use
+- **basic_information** - Personal details and background
+- **favorite_authors** - Authors you love
+
+This is based off of personal interests and use, feel free to suggest categories to add.
+
+---
+
 ## Tools Overview
 
 - How it works
@@ -85,9 +214,7 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 - **Important**: Remember your password - you'll need it for the database connection later
 - Create a new project and wait for it to finish setting up
 
-**2.** Load the database schema (choose preferred option):
-
-**Option 2a)** Using Supabase SQL Editor:
+**2.** Load the database schema in Supabase SQL Editor:
 - Copy the entire contents of [src/database/schema.sql](./src/database/schema.sql) 
 - Supabase Dashboard → SQL Editor → New query
 - Paste the copied schema code into the editor
@@ -99,14 +226,14 @@ Happy to help if you have any problems w the setup! Shoot me a message or send m
 
 ### **Choose Your Connection Type**
 
-Select the connection method based on your AI tool:
+Select the connection method based on your AI tools and subscription tiers:
 
 - **Option A: Stdio (Standard Input/Output)**
   - Use for: Coding agents (Cursor, Windsurf, etc.), Claude Desktop (Free tier)
   - Next step: Continue to [Local Testing](#local-testing) section below
 
 - **Option B: HTTP Streamable**
-  - Use for: ChatGPT Plus or higher, Claude Pro or higher
+  - Use for: ChatGPT Plus or higher, Claude Pro or higher, Coding agents (Cursor, Windsurf, etc.)
   - Next step: Skip to [Render Deployment](#render-deployment-only-for-streamable-http-server) section
 
 ### **Local Testing**
@@ -140,25 +267,17 @@ Select the connection method based on your AI tool:
 
 Feel free to use any hosting platform, this is personal preference.
 
-**1.** Go to [Render Dashboard](https://dashboard.render.com) and click **New > Web Service**
+**1.** Create a Render account at [Render](https://dashboard.render.com/register) or sign in if you have an existing account
 
-**2.** Choose **"Build and deploy from a Git repository"** and click **Next**
 
-**3.** Connect to the public GitHub repository:
-   - Repository URL: `https://github.com/KennethLeeJE8/datadam_mcp.git`
-   - Branch: `main`
+**2.** [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/KennethLeeJE8/datadam_mcp)
 
-**4.** The `render.yaml` file automatically configures most settings (name, runtime, build/start commands, root directory, etc.)
+You'll be prompted to fill in the required environment variables:
+- Ensure that branch is `main`
+- `SUPABASE_URL` - Get from: Supabase Dashboard → Project Settings → API → Project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Get from: Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
 
-**5.** Fill in the environment variables in the **Advanced** section:
-   - `SUPABASE_URL` - Get from: Supabase Dashboard → Project Settings → API → Project URL
-   - `SUPABASE_SERVICE_ROLE_KEY` - Get from: Supabase Dashboard → Project Settings → API → Project API keys → service_role (click "Reveal" to copy)
-
-**6.** Click **Create Web Service** to deploy
-
-**Notes:**
-- Health check path is automatically set to `/health` via render.yaml
-- Free tier can hit limits; use Standard tier for reliable uptime
+Ensure that the environment variables are filled out correctly, otherwise the deployment will fail. 
 
 ### **Verify HTTP Connections**
 - Health endpoint: `curl http://{render_url}/health`
@@ -189,10 +308,9 @@ Claude Desktop (Custom Connector)
 - Name: `dataDam`
 - Type: HTTP
 - URL: `https://<YOUR_RENDER_URL>/mcp`
-- No local `.env` needed; the server reads credentials from Render.
 
 ChatGPT (Connectors / Deep Research)
-- **Note**: ChatGPT only supports HTTP connections, not stdio
+- **Note**: ChatGPT only supports HTTP connections
 - **Requirement**: Custom connectors require ChatGPT Pro, Business, Enterprise, or Edu subscription
 - Enable Developer Mode in Settings → Connectors → Advanced → Developer mode.
 - Add a custom MCP server using the ChatGPT endpoint:
@@ -312,6 +430,7 @@ You can add categories in the category_resgistry table and it will dynamically u
 
 - datadam_create_personal_data
   - Purpose: Store a new record.
+  - **IMPORTANT**: Create ONE entry per entity. If storing 2 books, make 2 separate tool calls. If storing 3 contacts, make 3 separate tool calls. Never batch multiple entities into one record.
   - Args: `category` (required string); `title` (required string); `content` (required object/JSON); `tags?` string[]; `classification?` (default `personal`); `userId?` string (UUID).
   - Example:
     ```json
@@ -384,6 +503,13 @@ If you want to scope data to specific users, you can set up user authentication 
 
 - Empty categories/data
   - Insert data; run `select * from get_active_categories();`
+
+- Categories not updating after adding new category
+  - Categories are loaded when the MCP connection is established
+  - After adding a new category to the `category_registry` table, restart your AI client to establish a new connection
+  - For Claude Desktop: Restart the application
+  - For Cursor/coding agents: Reload the window or restart the editor
+  - For HTTP connections: The client will reconnect on next request
 
 - Client cannot connect
   - Use the `…/mcp` URL (or `…/chatgpt_mcp` for ChatGPT)
