@@ -70,16 +70,28 @@ function getMcpAuth(): Promise<MCPAuth> {
 /**
  * Express middleware for JWT Bearer token validation
  *
- * Functionality:
- * - Extracts 'Authorization: Bearer <token>' from request headers
- * - Validates JWT signature using Supabase public keys (JWKS)
- * - Checks token expiration, issuer, and audience claims
- * - Attaches decoded user info to req.auth on success
- * - Returns 401 with WWW-Authenticate header on failure
+ * IMPORTANT: This middleware REQUIRES a valid JWT token
+ *
+ * On Success (valid token):
+ * - Attaches decoded user info to req.auth
+ * - req.auth.subject contains the user ID
+ * - Request continues to route handler
+ *
+ * On Failure (missing, invalid, or expired token):
+ * - Returns 401 Unauthorized
+ * - Includes WWW-Authenticate header with error details
+ * - Request is blocked before reaching route handler
+ *
+ * Error cases:
+ * - Missing Authorization header → 401
+ * - Malformed token → 401
+ * - Invalid signature → 401
+ * - Expired token → 401
+ * - Wrong issuer/audience → 401
  *
  * Usage:
  * app.post('/mcp', authMiddleware, async (req, res) => {
- *   const userId = req.auth?.sub;  // Authenticated user ID
+ *   const userId = req.auth.subject;  // Guaranteed to exist here
  *   // ... handle request
  * });
  */

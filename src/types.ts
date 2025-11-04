@@ -3,20 +3,24 @@
 /**
  * Note: Express Request.auth is defined by mcp-auth library
  *
- * Authentication is OPTIONAL - the system works without userId.
+ * Authentication behavior depends on REQUIRE_AUTH environment variable:
  *
- * When REQUIRE_AUTH=true and user is authenticated:
- * - req.auth.subject - User ID (from 'sub' claim)
- * - req.auth.issuer - Token issuer
- * - req.auth.claims - All JWT claims (sub, email, role, etc.)
+ * REQUIRE_AUTH=true (Authentication REQUIRED):
+ * - Valid JWT token MUST be provided in Authorization header
+ * - Missing/invalid token → 401 Unauthorized error
+ * - Valid token → req.auth populated with:
+ *   - req.auth.subject - User ID (from 'sub' claim)
+ *   - req.auth.issuer - Token issuer
+ *   - req.auth.claims - All JWT claims (sub, email, role, etc.)
+ *
+ * REQUIRE_AUTH=false (No authentication):
+ * - No token required
+ * - req.auth is undefined
+ * - All tools and database functions work without user context
  *
  * For Supabase tokens, additional claims available in req.auth.claims:
  * - email, phone, role, aal, session_id, is_anonymous
  * - app_metadata, user_metadata, amr
- *
- * When REQUIRE_AUTH=false or no token provided:
- * - req.auth is undefined
- * - All tools and database functions work without user context
  */
 
 export interface PersonalDataRecord {

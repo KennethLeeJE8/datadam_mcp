@@ -18,8 +18,16 @@ dotenv.config();
 /**
  * Returns authentication middleware based on REQUIRE_AUTH environment variable
  *
- * If REQUIRE_AUTH=true: Returns full JWT validation middleware
- * If REQUIRE_AUTH=false: Returns pass-through middleware with test user
+ * If REQUIRE_AUTH=true:
+ *   - REQUIRES valid JWT token in Authorization header
+ *   - Returns 401 Unauthorized if token missing, invalid, or expired
+ *   - Sets req.auth.subject (userId) on successful validation
+ *   - Request blocked if authentication fails
+ *
+ * If REQUIRE_AUTH=false:
+ *   - No authentication required
+ *   - All requests allowed through
+ *   - req.auth is undefined (system works without userId)
  *
  * This enables gradual rollout and testing without authentication
  */
