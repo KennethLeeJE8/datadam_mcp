@@ -29,26 +29,9 @@ function getAuthMiddleware() {
   if (requireAuth) {
     return authMiddleware;
   } else {
-    // Pass-through middleware for testing without auth
+    // Pass-through middleware when auth is disabled - no user context required
     return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-      console.warn('⚠️  Authentication disabled - using test user');
-      req.auth = {
-        token: 'test-token',
-        issuer: 'test',
-        clientId: 'test-client',
-        scopes: ['read', 'write'],
-        subject: 'test-user-no-auth',
-        audience: 'test',
-        expiresAt: Date.now() + 3600000,
-        claims: {
-          sub: 'test-user-no-auth',
-          email: 'test@localhost.dev',
-          role: 'authenticated',
-          aal: 'aal1',
-          session_id: 'test-session',
-          is_anonymous: false
-        }
-      };
+      // Don't set req.auth - system works without userId
       next();
     };
   }
@@ -136,9 +119,9 @@ async function main() {
   // Handle POST requests for client-to-server communication (PROTECTED)
   app.post('/mcp', getAuthMiddleware(), async (req: express.Request, res: express.Response) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
-    const userId = req.auth?.subject; // Authenticated user ID from JWT
+    const userId = req.auth?.subject; // Optional: Authenticated user ID from JWT
 
-    if (requireAuth) {
+    if (requireAuth && userId) {
       console.log(`[AUTH] MCP request from user: ${userId}`);
     }
 
@@ -167,7 +150,8 @@ async function main() {
         }
       };
 
-      // TODO Phase 4: Pass userId to server for user-scoped operations
+      // TODO Phase 4: Optionally pass userId to server for user-scoped operations
+      // userId is optional - system works without it
       // const server = createMcpServer(userId);
       const server = createMcpServer();
       await server.connect(transport);
@@ -216,9 +200,9 @@ async function main() {
   // Handle POST requests for ChatGPT client-to-server communication
   app.post('/chatgpt_mcp', getAuthMiddleware(), async (req: express.Request, res: express.Response) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
-    const userId = req.auth?.subject; // Authenticated user ID from JWT
+    const userId = req.auth?.subject; // Optional: Authenticated user ID from JWT
 
-    if (requireAuth) {
+    if (requireAuth && userId) {
       console.log(`[AUTH] ChatGPT MCP request from user: ${userId}`);
     }
 
@@ -247,7 +231,8 @@ async function main() {
         }
       };
 
-      // TODO Phase 4: Pass userId to ChatGPT server for user-scoped operations
+      // TODO Phase 4: Optionally pass userId to ChatGPT server for user-scoped operations
+      // userId is optional - system works without it
       // const server = createChatGptMcpServer(userId);
       const server = createChatGptMcpServer();
       await server.connect(transport);

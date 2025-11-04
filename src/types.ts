@@ -3,7 +3,9 @@
 /**
  * Note: Express Request.auth is defined by mcp-auth library
  *
- * Access user info via:
+ * Authentication is OPTIONAL - the system works without userId.
+ *
+ * When REQUIRE_AUTH=true and user is authenticated:
  * - req.auth.subject - User ID (from 'sub' claim)
  * - req.auth.issuer - Token issuer
  * - req.auth.claims - All JWT claims (sub, email, role, etc.)
@@ -11,6 +13,10 @@
  * For Supabase tokens, additional claims available in req.auth.claims:
  * - email, phone, role, aal, session_id, is_anonymous
  * - app_metadata, user_metadata, amr
+ *
+ * When REQUIRE_AUTH=false or no token provided:
+ * - req.auth is undefined
+ * - All tools and database functions work without user context
  */
 
 export interface PersonalDataRecord {
