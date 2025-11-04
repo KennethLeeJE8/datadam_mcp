@@ -17,3 +17,9 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: SERVER_URL
+        sync: false
+      - key: REQUIRE_AUTH
+        value: true
+      - key: ALLOWED_ORIGINS
+        value: "*"
