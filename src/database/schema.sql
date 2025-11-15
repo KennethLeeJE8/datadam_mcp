@@ -2141,9 +2141,8 @@ SELECT
   COUNT(DISTINCT changes->>'query_text') as unique_queries,
   AVG((changes->>'limit')::int) as avg_limit,
   AVG((changes->>'threshold')::float) as avg_threshold,
-  array_agg(DISTINCT changes->>'query_text' ORDER BY changes->>'query_text')
-    FILTER (WHERE changes->>'query_text' IS NOT NULL)
-    LIMIT 5 as example_queries
+  (array_agg(DISTINCT changes->>'query_text' ORDER BY changes->>'query_text')
+    FILTER (WHERE changes->>'query_text' IS NOT NULL))[1:5] as example_queries
 FROM data_access_log
 WHERE table_name = 'memories'
   AND operation = 'READ'
@@ -2160,9 +2159,8 @@ SELECT
   COUNT(*) as usage_count,
   COUNT(DISTINCT user_id) as unique_users,
   COUNT(DISTINCT changes->>'query_text') as unique_queries,
-  array_agg(DISTINCT changes->>'query_text' ORDER BY changes->>'query_text')
-    FILTER (WHERE changes->>'query_text' IS NOT NULL)
-    LIMIT 3 as example_queries
+  (array_agg(DISTINCT changes->>'query_text' ORDER BY changes->>'query_text')
+    FILTER (WHERE changes->>'query_text' IS NOT NULL))[1:3] as example_queries
 FROM data_access_log
 WHERE table_name = 'memories'
   AND operation = 'READ'
