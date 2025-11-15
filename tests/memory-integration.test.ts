@@ -6,11 +6,12 @@
  * Setup:
  * 1. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are in .env
  * 2. Run the schema.sql file in Supabase (includes pgvector setup)
- * 3. Run: npx ts-node tests/memory-integration.test.ts
+ * 3. Run `npm run build` to compile TypeScript
+ * 4. Run: node tests/memory-integration.test.ts
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { MemoryService } from "../src/services/memory.js";
+import { MemoryService } from "../dist/services/memory.js";
 import dotenv from "dotenv";
 
 // Load environment variables

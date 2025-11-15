@@ -2,11 +2,14 @@
  * Quick Memory Test
  *
  * Fast smoke test for memory functionality
- * Run: npx ts-node tests/quick-memory-test.ts
+ *
+ * IMPORTANT: Run `npm run build` first to compile TypeScript!
+ *
+ * Run: node tests/quick-memory-test.ts
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { MemoryService } from "../src/services/memory.js";
+import { MemoryService } from "../dist/services/memory.js";
 import dotenv from "dotenv";
 
 dotenv.config();
