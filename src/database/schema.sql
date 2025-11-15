@@ -972,6 +972,7 @@ DROP FUNCTION IF EXISTS search_memories CASCADE;
 DROP FUNCTION IF EXISTS list_memories CASCADE;
 DROP FUNCTION IF EXISTS delete_memory CASCADE;
 DROP FUNCTION IF EXISTS get_memory CASCADE;
+DROP FUNCTION IF EXISTS get_memory_stats CASCADE;
 
 -- Function to add a new memory with vector embedding
 -- This function stores natural language memories and tracks them in history
