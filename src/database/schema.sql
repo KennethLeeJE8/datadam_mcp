@@ -981,7 +981,8 @@ CREATE OR REPLACE FUNCTION add_memory(
   p_user_id UUID DEFAULT NULL,
   p_embedding vector(1536) DEFAULT NULL,
   p_metadata JSONB DEFAULT '{}'::JSONB,
-  p_hash TEXT DEFAULT NULL
+  p_hash TEXT DEFAULT NULL,
+  p_semantic_dedup_threshold FLOAT DEFAULT 0.95
 )
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -990,8 +991,58 @@ AS $$
 DECLARE
   new_memory_id TEXT;
   existing_memory_id TEXT;
+  semantic_duplicate RECORD;
+  similarity_threshold FLOAT;
 BEGIN
-  -- Check if memory with same hash already exists (deduplication)
+  -- Step 1: Semantic deduplication (mem0 approach)
+  -- If embedding provided, check for semantically similar memories
+  IF p_embedding IS NOT NULL THEN
+    -- Search for very similar memories (high similarity = likely duplicate)
+    SELECT
+      id,
+      memory_text,
+      1 - (embedding <=> p_embedding) AS similarity
+    INTO semantic_duplicate
+    FROM memories
+    WHERE
+      deleted_at IS NULL
+      AND (p_user_id IS NULL OR user_id = p_user_id)
+      AND embedding IS NOT NULL
+      AND (1 - (embedding <=> p_embedding)) >= p_semantic_dedup_threshold
+    ORDER BY embedding <=> p_embedding
+    LIMIT 1;
+
+    -- If very similar memory found, update it instead of creating new (mem0 behavior)
+    IF semantic_duplicate.id IS NOT NULL THEN
+      UPDATE memories
+      SET
+        memory_text = p_memory_text,
+        embedding = p_embedding,
+        metadata = p_metadata,
+        hash = p_hash,
+        updated_at = NOW()
+      WHERE id = semantic_duplicate.id;
+
+      -- Log the semantic update in history
+      INSERT INTO memory_history (
+        memory_id, previous_value, new_value, action, metadata
+      ) VALUES (
+        semantic_duplicate.id,
+        semantic_duplicate.memory_text,
+        p_memory_text,
+        'UPDATE_SEMANTIC',
+        jsonb_build_object(
+          'similarity', semantic_duplicate.similarity,
+          'dedup_method', 'semantic',
+          'metadata', p_metadata
+        )
+      );
+
+      RETURN semantic_duplicate.id;
+    END IF;
+  END IF;
+
+  -- Step 2: Hash-based deduplication (exact match fallback)
   IF p_hash IS NOT NULL THEN
     SELECT id INTO existing_memory_id
     FROM memories
@@ -1010,11 +1061,11 @@ BEGIN
         updated_at = NOW()
       WHERE id = existing_memory_id;
 
-      -- Log the update in history
+      -- Log the hash-based update in history
       INSERT INTO memory_history (
         memory_id, previous_value, new_value, action, metadata
       ) VALUES (
-        existing_memory_id, NULL, p_memory_text, 'UPDATE', p_metadata
+        existing_memory_id, NULL, p_memory_text, 'UPDATE_HASH', p_metadata
       );
 
       RETURN existing_memory_id;
@@ -1058,6 +1109,101 @@ BEGIN
   );
 
   RETURN new_memory_id;
+END;
+$$;
+
+-- Function to update an existing memory by ID
+-- Supports updating text, embedding, and metadata (merge or replace)
+DROP FUNCTION IF EXISTS update_memory(TEXT, TEXT, vector, JSONB, BOOLEAN);
+CREATE OR REPLACE FUNCTION update_memory(
+  p_memory_id TEXT,
+  p_memory_text TEXT DEFAULT NULL,
+  p_embedding vector(1536) DEFAULT NULL,
+  p_metadata JSONB DEFAULT NULL,
+  p_metadata_merge BOOLEAN DEFAULT TRUE
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  current_memory RECORD;
+  new_metadata JSONB;
+  new_hash TEXT;
+BEGIN
+  -- Get current memory
+  SELECT * INTO current_memory
+  FROM memories
+  WHERE id = p_memory_id
+    AND deleted_at IS NULL;
+
+  IF current_memory IS NULL THEN
+    RAISE EXCEPTION 'Memory not found or deleted: %', p_memory_id;
+  END IF;
+
+  -- Calculate new hash if text is changing
+  IF p_memory_text IS NOT NULL THEN
+    new_hash := md5(p_memory_text || COALESCE(current_memory.user_id::TEXT, ''));
+  ELSE
+    new_hash := current_memory.hash;
+  END IF;
+
+  -- Handle metadata merge or replace
+  IF p_metadata IS NOT NULL THEN
+    IF p_metadata_merge THEN
+      new_metadata := current_memory.metadata || p_metadata;
+    ELSE
+      new_metadata := p_metadata;
+    END IF;
+  ELSE
+    new_metadata := current_memory.metadata;
+  END IF;
+
+  -- Update the memory
+  UPDATE memories
+  SET
+    memory_text = COALESCE(p_memory_text, memory_text),
+    embedding = COALESCE(p_embedding, embedding),
+    metadata = new_metadata,
+    hash = new_hash,
+    updated_at = NOW()
+  WHERE id = p_memory_id;
+
+  -- Log in history
+  INSERT INTO memory_history (
+    memory_id,
+    previous_value,
+    new_value,
+    action,
+    metadata
+  ) VALUES (
+    p_memory_id,
+    current_memory.memory_text,
+    COALESCE(p_memory_text, current_memory.memory_text),
+    'UPDATE',
+    new_metadata
+  );
+
+  -- Log in data access log
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    current_memory.user_id, 'UPDATE', 'memories', p_memory_id::UUID,
+    jsonb_build_object(
+      'memory_id', p_memory_id,
+      'text_changed', p_memory_text IS NOT NULL,
+      'embedding_changed', p_embedding IS NOT NULL,
+      'metadata_changed', p_metadata IS NOT NULL
+    ),
+    inet_client_addr(), 'update_memory_function'
+  );
+
+  RETURN jsonb_build_object(
+    'memory_id', p_memory_id,
+    'updated', true,
+    'action', 'UPDATE'
+  );
 END;
 $$;
 

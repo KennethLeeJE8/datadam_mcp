@@ -21,18 +21,20 @@ export class MemoryService {
   }
 
   /**
-   * Add a new memory
+   * Add a new memory with intelligent semantic deduplication (mem0-style)
    * @param memoryText - The memory content
    * @param userId - Optional user ID
    * @param embedding - Optional vector embedding (1536 dimensions). If not provided, will be auto-generated
    * @param metadata - Optional metadata (source, category, tags, etc.)
-   * @returns Memory ID
+   * @param semanticDedupThreshold - Similarity threshold for semantic deduplication (0.0-1.0, default 0.95)
+   * @returns Memory ID (may be existing memory if semantically similar)
    */
   async addMemory(
     memoryText: string,
     userId?: string | null,
     embedding?: number[] | null,
-    metadata: Record<string, any> = {}
+    metadata: Record<string, any> = {},
+    semanticDedupThreshold: number = 0.95
   ): Promise<string> {
     // Generate hash for deduplication
     const hash = this.generateHash(memoryText, userId);
@@ -55,7 +57,8 @@ export class MemoryService {
       p_user_id: userId || null,
       p_embedding: embeddingVector,
       p_metadata: metadata,
-      p_hash: hash
+      p_hash: hash,
+      p_semantic_dedup_threshold: semanticDedupThreshold
     });
 
     if (error) {
@@ -63,6 +66,40 @@ export class MemoryService {
     }
 
     return data as string;
+  }
+
+  /**
+   * Update an existing memory by ID
+   * @param memoryId - The memory ID to update
+   * @param memoryText - Optional new memory text
+   * @param embedding - Optional new embedding
+   * @param metadata - Optional new/updated metadata
+   * @param metadataMerge - If true, merges with existing metadata. If false, replaces it
+   * @returns Update result
+   */
+  async updateMemory(
+    memoryId: string,
+    memoryText?: string | null,
+    embedding?: number[] | null,
+    metadata?: Record<string, any> | null,
+    metadataMerge: boolean = true
+  ): Promise<any> {
+    // Convert embedding if provided
+    const embeddingVector = embedding ? `[${embedding.join(',')}]` : null;
+
+    const { data, error } = await this.supabase.rpc('update_memory', {
+      p_memory_id: memoryId,
+      p_memory_text: memoryText || null,
+      p_embedding: embeddingVector,
+      p_metadata: metadata || null,
+      p_metadata_merge: metadataMerge
+    });
+
+    if (error) {
+      throw new Error(`Failed to update memory: ${error.message}`);
+    }
+
+    return data;
   }
 
   /**
