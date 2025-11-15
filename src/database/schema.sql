@@ -1305,7 +1305,14 @@ BEGIN
     COUNT(*)::INTEGER as total_memories,
     COUNT(*) FILTER (WHERE deleted_at IS NULL)::INTEGER as active_memories,
     COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::INTEGER as deleted_memories,
-    (SELECT COUNT(*)::INTEGER FROM memory_history WHERE user_id IS NULL OR memory_id IN (SELECT id FROM memories WHERE user_id = p_user_id)) as total_history_entries,
+    (SELECT COUNT(*)::INTEGER
+     FROM memory_history mh
+     WHERE mh.memory_id IN (
+       SELECT m.id
+       FROM memories m
+       WHERE p_user_id IS NULL OR m.user_id = p_user_id
+     )
+    ) as total_history_entries,
     COUNT(*) FILTER (WHERE embedding IS NOT NULL AND deleted_at IS NULL)::INTEGER as memories_with_embeddings
   FROM memories
   WHERE p_user_id IS NULL OR user_id = p_user_id;
