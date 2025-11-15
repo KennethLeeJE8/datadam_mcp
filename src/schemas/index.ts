@@ -93,3 +93,42 @@ export const ChatGptSearchInputSchema = {
 export const ChatGptFetchInputSchema = {
   id: z.string().min(1).describe("Document ID (UUID) to retrieve. Obtained from search results.")
 };
+
+// Memory Tool Schemas
+
+// Add Memory Input Schema
+export const AddMemoryInputSchema = {
+  memory_text: z.string().min(1).describe("The memory content in natural language. Examples: 'I prefer morning meetings', 'I'm learning TypeScript', 'I enjoy sci-fi books'"),
+  user_id: z.string().optional().describe("Optional: User UUID for multi-user systems"),
+  metadata: z.record(z.any()).optional().describe("Optional: Additional metadata as key-value pairs. Can include source, category, tags, confidence, related_data_ids"),
+  generate_embedding: z.boolean().default(false).describe("Generate embedding for semantic search. Default: false (for testing without OpenAI)"),
+  response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+};
+
+// Search Memories Input Schema
+export const SearchMemoriesInputSchema = {
+  query: z.string().min(1).describe("Natural language search query. Examples: 'What are my preferences?', 'meetings', 'programming languages I use'"),
+  user_id: z.string().optional().describe("Optional: User UUID to filter results"),
+  limit: z.number().min(1).max(100).default(10).describe("Max results. Default: 10, Max: 100"),
+  filters: z.record(z.any()).optional().describe("Optional: Metadata filters as JSON. Examples: {\"source\": \"conversation\"}, {\"category\": \"preferences\"}"),
+  threshold: z.number().min(0).max(1).default(0.1).describe("Minimum similarity threshold (0.0-1.0). Default: 0.1. Higher = more strict"),
+  generate_embedding: z.boolean().default(false).describe("Generate embedding for search. Default: false (for testing without OpenAI)"),
+  response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+};
+
+// List Memories Input Schema
+export const ListMemoriesInputSchema = {
+  user_id: z.string().optional().describe("Optional: User UUID to filter results"),
+  limit: z.number().min(1).max(100).default(50).describe("Results per page. Default: 50, Max: 100"),
+  offset: z.number().min(0).default(0).describe("Pagination offset. Default: 0"),
+  filters: z.record(z.any()).optional().describe("Optional: Metadata filters as JSON. Examples: {\"source\": \"conversation\"}, {\"category\": \"preferences\"}"),
+  include_deleted: z.boolean().default(false).describe("Include soft-deleted memories. Default: false"),
+  response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+};
+
+// Delete Memory Input Schema
+export const DeleteMemoryInputSchema = {
+  memory_id: z.string().min(1).describe("Memory ID to delete. Obtained from search or list operations. Never show to user."),
+  hard_delete: z.boolean().default(false).describe("Permanent deletion flag. Default: false (soft delete, recoverable). WARNING: Hard delete cannot be undone."),
+  response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
+};
