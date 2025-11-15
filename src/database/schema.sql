@@ -1068,7 +1068,8 @@ CREATE OR REPLACE FUNCTION search_memories(
   p_user_id UUID DEFAULT NULL,
   p_limit INTEGER DEFAULT 10,
   p_filters JSONB DEFAULT NULL,
-  p_threshold FLOAT DEFAULT 0.1
+  p_threshold FLOAT DEFAULT 0.1,
+  p_query_text TEXT DEFAULT NULL
 )
 RETURNS TABLE (
   id TEXT,
@@ -1090,6 +1091,7 @@ BEGIN
     p_user_id, 'READ', 'memories', NULL,
     jsonb_build_object(
       'operation_type', 'vector_search',
+      'query_text', p_query_text,
       'limit', p_limit,
       'filters', p_filters,
       'threshold', p_threshold

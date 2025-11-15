@@ -84,8 +84,8 @@ export class MemoryService {
     // Generate embedding for query
     const queryEmbedding = await this.embeddingsService.generateEmbedding(queryText);
 
-    // Search with generated embedding
-    return this.searchMemories(queryEmbedding, userId, limit, filters, threshold);
+    // Search with generated embedding, passing query text for logging
+    return this.searchMemories(queryEmbedding, userId, limit, filters, threshold, queryText);
   }
 
   /**
@@ -95,6 +95,7 @@ export class MemoryService {
    * @param limit - Maximum number of results
    * @param filters - Optional metadata filters
    * @param threshold - Minimum similarity threshold (0.0 - 1.0)
+   * @param queryText - Optional query text for logging purposes
    * @returns Array of memory search results with similarity scores
    */
   async searchMemories(
@@ -102,7 +103,8 @@ export class MemoryService {
     userId?: string | null,
     limit: number = 10,
     filters?: Record<string, any> | null,
-    threshold: number = 0.1
+    threshold: number = 0.1,
+    queryText?: string | null
   ): Promise<MemorySearchResult[]> {
     if (queryEmbedding.length !== 1536) {
       throw new Error('Query embedding must be 1536 dimensions');
@@ -116,7 +118,8 @@ export class MemoryService {
       p_user_id: userId || null,
       p_limit: limit,
       p_filters: filters || null,
-      p_threshold: threshold
+      p_threshold: threshold,
+      p_query_text: queryText || null
     });
 
     if (error) {
