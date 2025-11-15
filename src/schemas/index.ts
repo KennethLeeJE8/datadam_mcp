@@ -101,7 +101,6 @@ export const AddMemoryInputSchema = {
   memory_text: z.string().min(1).describe("The memory content in natural language. Examples: 'I prefer morning meetings', 'I'm learning TypeScript', 'I enjoy sci-fi books'"),
   user_id: z.string().optional().describe("Optional: User UUID for multi-user systems"),
   metadata: z.record(z.any()).optional().describe("Optional: Additional metadata as key-value pairs. Can include source, category, tags, confidence, related_data_ids"),
-  generate_embedding: z.boolean().default(false).describe("Generate embedding for semantic search. Default: false (for testing without OpenAI)"),
   response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
 };
 
@@ -112,7 +111,6 @@ export const SearchMemoriesInputSchema = {
   limit: z.number().min(1).max(100).default(10).describe("Max results. Default: 10, Max: 100"),
   filters: z.record(z.any()).optional().describe("Optional: Metadata filters as JSON. Examples: {\"source\": \"conversation\"}, {\"category\": \"preferences\"}"),
   threshold: z.number().min(0).max(1).default(0.1).describe("Minimum similarity threshold (0.0-1.0). Default: 0.1. Higher = more strict"),
-  generate_embedding: z.boolean().default(false).describe("Generate embedding for search. Default: false (for testing without OpenAI)"),
   response_format: z.enum(['json', 'markdown']).default('markdown').describe("Response format: 'markdown' (human-readable, default) or 'json' (machine-readable)")
 };
 

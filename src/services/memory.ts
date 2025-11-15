@@ -3,6 +3,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Memory, MemorySearchResult } from "../types.js";
+import { EmbeddingsService } from "./embeddings.js";
 import crypto from "crypto";
 
 /**
@@ -10,13 +11,20 @@ import crypto from "crypto";
  * Handles semantic memory operations using Supabase RPC functions
  */
 export class MemoryService {
-  constructor(private supabase: SupabaseClient) {}
+  private embeddingsService: EmbeddingsService;
+
+  constructor(
+    private supabase: SupabaseClient,
+    embeddingsService?: EmbeddingsService
+  ) {
+    this.embeddingsService = embeddingsService || new EmbeddingsService();
+  }
 
   /**
    * Add a new memory
    * @param memoryText - The memory content
    * @param userId - Optional user ID
-   * @param embedding - Optional vector embedding (1536 dimensions for OpenAI)
+   * @param embedding - Optional vector embedding (1536 dimensions). If not provided, will be auto-generated
    * @param metadata - Optional metadata (source, category, tags, etc.)
    * @returns Memory ID
    */
@@ -29,8 +37,18 @@ export class MemoryService {
     // Generate hash for deduplication
     const hash = this.generateHash(memoryText, userId);
 
-    // Convert embedding array to pgvector format if provided
-    const embeddingVector = embedding ? `[${embedding.join(',')}]` : null;
+    // Auto-generate embedding if not provided
+    let finalEmbedding = embedding;
+    if (!finalEmbedding) {
+      try {
+        finalEmbedding = await this.embeddingsService.generateEmbedding(memoryText);
+      } catch (error) {
+        console.warn('Failed to generate embedding, storing without embedding:', error);
+      }
+    }
+
+    // Convert embedding array to pgvector format if available
+    const embeddingVector = finalEmbedding ? `[${finalEmbedding.join(',')}]` : null;
 
     const { data, error } = await this.supabase.rpc('add_memory', {
       p_memory_text: memoryText,
@@ -45,6 +63,29 @@ export class MemoryService {
     }
 
     return data as string;
+  }
+
+  /**
+   * Search memories by text query (auto-generates embedding)
+   * @param queryText - Natural language search query
+   * @param userId - Optional user ID to filter results
+   * @param limit - Maximum number of results
+   * @param filters - Optional metadata filters
+   * @param threshold - Minimum similarity threshold (0.0 - 1.0)
+   * @returns Array of memory search results with similarity scores
+   */
+  async searchMemoriesByText(
+    queryText: string,
+    userId?: string | null,
+    limit: number = 10,
+    filters?: Record<string, any> | null,
+    threshold: number = 0.1
+  ): Promise<MemorySearchResult[]> {
+    // Generate embedding for query
+    const queryEmbedding = await this.embeddingsService.generateEmbedding(queryText);
+
+    // Search with generated embedding
+    return this.searchMemories(queryEmbedding, userId, limit, filters, threshold);
   }
 
   /**
@@ -83,6 +124,13 @@ export class MemoryService {
     }
 
     return (data || []) as MemorySearchResult[];
+  }
+
+  /**
+   * Check if embeddings service is using OpenAI
+   */
+  isUsingOpenAI(): boolean {
+    return this.embeddingsService.isUsingOpenAI();
   }
 
   /**

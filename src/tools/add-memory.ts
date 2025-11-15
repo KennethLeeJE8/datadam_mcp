@@ -16,7 +16,7 @@ export function registerAddMemoryTool(
     "datadam_add_memory",
     {
       title: "Add Semantic Memory",
-      description: `Store natural language memories for contextual recall. Captures conversational context, preferences, and insights that complement structured data.
+      description: `Store natural language memories for contextual recall. Automatically generates embeddings for semantic search using OpenAI (or mock embeddings if API key not configured).
 
 WHEN TO USE:
 - User shares preferences: "I prefer morning meetings", "I like dark mode"
@@ -29,6 +29,11 @@ DIFFERENCE FROM STRUCTURED DATA:
 - Memories: Conversational, contextual, temporal ("I'm currently learning X")
 - Structured Data: Facts, attributes, categories ("Contact: John Smith, email: john@example.com")
 
+EMBEDDING GENERATION:
+- Automatically generates OpenAI embeddings if OPENAI_API_KEY is configured
+- Falls back to mock embeddings for testing if no API key is present
+- Embeddings enable semantic search via datadam_search_memories
+
 Args:
   - memory_text (string, required): Natural language memory content
   - user_id (string, optional): User UUID for multi-user systems
@@ -38,24 +43,23 @@ Args:
     * tags: Array of tags for organization
     * confidence: 0.0-1.0 score for inferred memories
     * related_data_ids: UUIDs of related structured data
-  - generate_embedding (boolean, optional): Generate vector embedding for semantic search. Default: false (requires OpenAI API key)
   - response_format (string, optional): 'markdown' (default) or 'json'
 
 Returns:
-  - Success message with memory ID
-  - For JSON format: {success: true, operation: "created", memory_id, message}
+  - Success message with memory ID and embedding status
+  - For JSON format: {success: true, operation: "created", memory_id, message, has_embedding, embedding_type}
   - For Markdown format: "✓ Successfully stored memory: **{memory_text}**"
 
 Examples:
   1. Simple preference: { memory_text: "I prefer dark mode in all applications", metadata: { source: "conversation", category: "preferences" } }
   2. Learning context: { memory_text: "I'm currently learning TypeScript and building an MCP server", metadata: { source: "conversation", tags: ["learning", "typescript", "mcp"] } }
   3. Inferred insight: { memory_text: "User seems to prefer functional programming patterns", metadata: { source: "inferred", confidence: 0.85 } }
-  4. With embedding: { memory_text: "I enjoy science fiction books", generate_embedding: true }
 
 Error Handling:
   - Database errors: Returns error with troubleshooting guidance
   - Invalid input: Returns validation error
-  - Deduplication: Automatically updates existing memory with same hash`,
+  - Deduplication: Automatically updates existing memory with same hash
+  - Embedding failures: Falls back to storing without embeddings (search will still work with mock embeddings)`,
       inputSchema: AddMemoryInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -64,27 +68,20 @@ Error Handling:
         openWorldHint: false
       }
     },
-    async ({ memory_text, user_id, metadata = {}, generate_embedding = false, response_format = 'markdown' }) => {
+    async ({ memory_text, user_id, metadata = {}, response_format = 'markdown' }) => {
       try {
-        let embedding: number[] | null = null;
-
-        // Generate embedding if requested
-        if (generate_embedding) {
-          // For testing, use mock embedding
-          // In production, this would call OpenAI API
-          embedding = memoryService.generateMockEmbedding(memory_text);
-        }
-
-        // Add memory via service
+        // Add memory via service (embeddings are auto-generated)
         const memoryId = await memoryService.addMemory(
           memory_text,
           user_id || null,
-          embedding,
+          null, // Let the service auto-generate embeddings
           {
             ...metadata,
             timestamp: new Date().toISOString()
           }
         );
+
+        const embeddingType = memoryService.isUsingOpenAI() ? 'OpenAI' : 'Mock';
 
         if (response_format === 'json') {
           return {
@@ -95,7 +92,8 @@ Error Handling:
                 operation: "created",
                 memory_id: memoryId,
                 message: `Successfully stored memory: "${memory_text.substring(0, 50)}${memory_text.length > 50 ? '...' : ''}"`,
-                has_embedding: !!embedding
+                has_embedding: true,
+                embedding_type: embeddingType
               }, null, 2)
             }]
           };
@@ -109,7 +107,7 @@ Error Handling:
               type: "text",
               text: `✓ Successfully stored memory: **${truncatedText}**\n\n` +
                    `Memory ID: \`${memoryId}\`\n` +
-                   `Embedding: ${embedding ? '✓ Generated' : '✗ Not generated'}\n` +
+                   `Embedding: ✓ Generated (${embeddingType})\n` +
                    `Metadata: ${Object.keys(metadata).length > 0 ? JSON.stringify(metadata, null, 2) : 'None'}`
             }]
           };

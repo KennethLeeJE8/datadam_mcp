@@ -17,7 +17,7 @@ export function registerSearchMemoriesTool(
     "datadam_search_memories",
     {
       title: "Search Memories Semantically",
-      description: `Search stored memories using semantic similarity. Finds contextually relevant memories even without exact keyword matches.
+      description: `Search stored memories using semantic similarity. Automatically generates embeddings for your query using OpenAI (or mock embeddings if API key not configured). Finds contextually relevant memories even without exact keyword matches.
 
 WHEN TO USE:
 - Finding preferences: "What do you know about my preferences?"
@@ -26,9 +26,14 @@ WHEN TO USE:
 - Broad queries: "Tell me about my work setup"
 
 DIFFERENCE FROM KEYWORD SEARCH:
-- Semantic search finds conceptually similar memories
+- Semantic search finds conceptually similar memories using vector similarity
 - Keyword search (datadam_search_personal_data) finds exact matches in structured data
 - Use this for conversational queries, use keyword search for specific facts
+
+EMBEDDING GENERATION:
+- Automatically generates OpenAI embeddings for your query if OPENAI_API_KEY is configured
+- Falls back to mock embeddings for testing if no API key is present
+- Compares query embedding against stored memory embeddings using cosine similarity
 
 Args:
   - query (string, required): Natural language search query
@@ -36,11 +41,10 @@ Args:
   - limit (number, optional): Max results. Default: 10, Range: 1-100
   - filters (object, optional): Metadata filters. Examples: {"source": "conversation"}, {"category": "preferences"}
   - threshold (number, optional): Minimum similarity (0.0-1.0). Default: 0.1. Higher = stricter matching
-  - generate_embedding (boolean, optional): Generate query embedding. Default: false (for testing)
   - response_format (string, optional): 'markdown' (default) or 'json'
 
 Returns:
-  - For JSON format: {total, results[], threshold_used}
+  - For JSON format: {total, results[], threshold_used, query}
   - For Markdown format: Numbered list with similarity scores, content, metadata
   - Each result includes: memory_text, similarity score, metadata, timestamps
 
@@ -48,7 +52,7 @@ Examples:
   1. Preference query: { query: "What are my meeting preferences?", threshold: 0.3 }
   2. Filtered search: { query: "programming", filters: {"category": "interests"}, limit: 5 }
   3. User-specific: { query: "tools I use", user_id: "uuid-here" }
-  4. With embedding: { query: "dark mode preferences", generate_embedding: true }
+  4. Strict matching: { query: "dark mode preferences", threshold: 0.5 }
 
 Error Handling:
   - No results: Returns empty array with suggestions
@@ -62,30 +66,11 @@ Error Handling:
         openWorldHint: false
       }
     },
-    async ({ query, user_id, limit = 10, filters, threshold = 0.1, generate_embedding = false, response_format = 'markdown' }) => {
+    async ({ query, user_id, limit = 10, filters, threshold = 0.1, response_format = 'markdown' }) => {
       try {
-        // For testing without OpenAI, we need mock embeddings
-        if (!generate_embedding) {
-          // Return empty results with helpful message
-          return {
-            content: [{
-              type: "text",
-              text: formatErrorMessage(
-                "Semantic search requires embeddings",
-                "Set generate_embedding: true to enable search, or use datadam_list_memories for non-semantic browsing. " +
-                "Note: This implementation uses mock embeddings for testing. Production requires OpenAI API key.",
-                response_format
-              )
-            }]
-          };
-        }
-
-        // Generate query embedding
-        const queryEmbedding = memoryService.generateMockEmbedding(query);
-
-        // Search memories
-        const results = await memoryService.searchMemories(
-          queryEmbedding,
+        // Use searchMemoriesByText which auto-generates embeddings
+        const results = await memoryService.searchMemoriesByText(
+          query,
           user_id || null,
           limit,
           filters || null,
