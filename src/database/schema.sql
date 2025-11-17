@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS memory_history (
     memory_id TEXT NOT NULL,
     previous_value TEXT,
     new_value TEXT,
-    action TEXT NOT NULL CHECK (action IN ('ADD', 'UPDATE', 'UPDATE_SEMANTIC', 'UPDATE_HASH', 'DELETE')),
+    action TEXT NOT NULL,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
@@ -188,6 +188,11 @@ CREATE TABLE IF NOT EXISTS memory_history (
 
     CONSTRAINT memory_history_memory_id_fkey FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
 );
+
+-- Update constraint to include new action types for semantic deduplication
+ALTER TABLE memory_history DROP CONSTRAINT IF EXISTS memory_history_action_check;
+ALTER TABLE memory_history ADD CONSTRAINT memory_history_action_check
+    CHECK (action IN ('ADD', 'UPDATE', 'UPDATE_SEMANTIC', 'UPDATE_HASH', 'DELETE'));
 
 -- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
