@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS memory_history (
     memory_id TEXT NOT NULL,
     previous_value TEXT,
     new_value TEXT,
-    action TEXT NOT NULL CHECK (action IN ('ADD', 'UPDATE', 'DELETE')),
+    action TEXT NOT NULL CHECK (action IN ('ADD', 'UPDATE', 'UPDATE_SEMANTIC', 'UPDATE_HASH', 'DELETE')),
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ,

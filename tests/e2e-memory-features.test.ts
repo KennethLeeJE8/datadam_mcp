@@ -108,7 +108,8 @@ async function runTests() {
     testMemoryIds.push(memory1Id);
 
     logTest("Memory created", !!memory1Id);
-    logTest("Memory ID format valid", memory1Id.startsWith("mem_"));
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(memory1Id);
+    logTest("Memory ID format valid (UUID)", isValidUUID);
 
     const historyLogged = await verifyMemoryHistory(memory1Id, "ADD");
     logTest("Memory history logged (ADD)", historyLogged);
