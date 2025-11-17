@@ -1478,7 +1478,8 @@ END;
 $$;
 
 -- Grant permissions to service role
-GRANT EXECUTE ON FUNCTION add_memory(TEXT, UUID, vector(1536), JSONB, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT) TO service_role;
+GRANT EXECUTE ON FUNCTION update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN) TO service_role;
 GRANT EXECUTE ON FUNCTION search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT) TO service_role;
 GRANT EXECUTE ON FUNCTION list_memories(UUID, INTEGER, INTEGER, JSONB, BOOLEAN) TO service_role;
 GRANT EXECUTE ON FUNCTION delete_memory(TEXT, BOOLEAN) TO service_role;
@@ -1486,7 +1487,8 @@ GRANT EXECUTE ON FUNCTION get_memory(TEXT, BOOLEAN) TO service_role;
 GRANT EXECUTE ON FUNCTION get_memory_stats(UUID) TO service_role;
 
 -- Grant permissions to authenticated users
-GRANT EXECUTE ON FUNCTION add_memory(TEXT, UUID, vector(1536), JSONB, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN) TO authenticated;
 GRANT EXECUTE ON FUNCTION search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT) TO authenticated;
 GRANT EXECUTE ON FUNCTION list_memories(UUID, INTEGER, INTEGER, JSONB, BOOLEAN) TO authenticated;
 GRANT EXECUTE ON FUNCTION delete_memory(TEXT, BOOLEAN) TO authenticated;
