@@ -967,17 +967,17 @@ GRANT EXECUTE ON FUNCTION delete_personal_data(UUID[], BOOLEAN) TO authenticated
 -- These functions provide CRUD operations for semantic memories with vector embeddings
 
 -- Drop existing memory functions first
--- Drop old function signatures explicitly for clean migration
-DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT);  -- 5-param old version
-DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT);  -- 6-param current version
+-- Drop existing memory functions for idempotent schema application
+DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT);
 DROP FUNCTION IF EXISTS add_memory CASCADE;
-DROP FUNCTION IF EXISTS search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT);  -- 5-param old version
-DROP FUNCTION IF EXISTS search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT, TEXT);  -- 6-param current version
+DROP FUNCTION IF EXISTS search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT, TEXT);
 DROP FUNCTION IF EXISTS search_memories CASCADE;
 DROP FUNCTION IF EXISTS list_memories CASCADE;
 DROP FUNCTION IF EXISTS delete_memory CASCADE;
 DROP FUNCTION IF EXISTS get_memory CASCADE;
 DROP FUNCTION IF EXISTS get_memory_stats CASCADE;
+DROP FUNCTION IF EXISTS update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN);
+DROP FUNCTION IF EXISTS update_memory CASCADE;
 
 -- Function to add a new memory with vector embedding
 -- This function stores natural language memories and tracks them in history
@@ -1120,11 +1120,6 @@ $$;
 
 -- Function to update an existing memory by ID
 -- Supports updating text, embedding, and metadata (merge or replace)
--- Drop old update_memory signatures explicitly for clean migration
-DROP FUNCTION IF EXISTS update_memory(TEXT, TEXT, vector, JSONB, BOOLEAN);
-DROP FUNCTION IF EXISTS update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN);
-DROP FUNCTION IF EXISTS update_memory CASCADE;
-
 CREATE OR REPLACE FUNCTION update_memory(
   p_memory_id TEXT,
   p_memory_text TEXT DEFAULT NULL,
