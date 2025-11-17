@@ -56,6 +56,9 @@ async function cleanup() {
 }
 
 async function verifyMemoryHistory(memoryId: string, expectedAction: string): Promise<boolean> {
+  // Small delay to ensure transaction is committed
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   const { data, error } = await supabase
     .from("memory_history")
     .select("*")
@@ -63,14 +66,29 @@ async function verifyMemoryHistory(memoryId: string, expectedAction: string): Pr
     .order("created_at", { ascending: false })
     .limit(1);
 
-  if (error || !data || data.length === 0) {
+  if (error) {
+    console.log(`      [DEBUG] History query error: ${error.message}`);
     return false;
   }
 
-  return data[0].action === expectedAction;
+  if (!data || data.length === 0) {
+    console.log(`      [DEBUG] No history found for memory: ${memoryId}`);
+    return false;
+  }
+
+  const actualAction = data[0].action;
+  if (actualAction !== expectedAction) {
+    console.log(`      [DEBUG] Expected action '${expectedAction}', got '${actualAction}'`);
+    return false;
+  }
+
+  return true;
 }
 
 async function verifyDataAccessLog(operation: string, tableName: string = "memories"): Promise<boolean> {
+  // Small delay to ensure transaction is committed
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   const { data, error } = await supabase
     .from("data_access_log")
     .select("*")
@@ -79,7 +97,36 @@ async function verifyDataAccessLog(operation: string, tableName: string = "memor
     .order("created_at", { ascending: false })
     .limit(1);
 
-  return !error && data && data.length > 0;
+  if (error) {
+    console.log(`      [DEBUG] Access log query error: ${error.message}`);
+    return false;
+  }
+
+  if (!data || data.length === 0) {
+    console.log(`      [DEBUG] No access log found for operation: ${operation}`);
+    return false;
+  }
+
+  return true;
+}
+
+async function debugMemoryHistory(memoryId: string) {
+  const { data, error } = await supabase
+    .from("memory_history")
+    .select("*")
+    .eq("memory_id", memoryId)
+    .order("created_at", { ascending: true });
+
+  console.log(`\n   [DEBUG] All history for memory ${memoryId}:`);
+  if (error) {
+    console.log(`   Error: ${error.message}`);
+  } else if (!data || data.length === 0) {
+    console.log(`   No history records found`);
+  } else {
+    data.forEach((record, idx) => {
+      console.log(`   ${idx + 1}. Action: ${record.action}, Created: ${record.created_at}`);
+    });
+  }
 }
 
 async function runTests() {
@@ -116,6 +163,11 @@ async function runTests() {
 
     const accessLogged = await verifyDataAccessLog("CREATE");
     logTest("Data access log recorded (CREATE)", accessLogged);
+
+    // Debug: Show all history if verification failed
+    if (!historyLogged) {
+      await debugMemoryHistory(memory1Id);
+    }
 
     console.log();
 
@@ -168,6 +220,11 @@ async function runTests() {
     if (isSameAsFirst) {
       const historyLogged = await verifyMemoryHistory(memory1Id, "UPDATE_HASH");
       logTest("UPDATE_HASH logged in history", historyLogged);
+
+      // Debug: Show all history if verification failed
+      if (!historyLogged) {
+        await debugMemoryHistory(memory1Id);
+      }
     }
 
     console.log();
@@ -296,6 +353,13 @@ async function runTests() {
 
       const hasUpdateHash = memoryWithHistory.history.some(h => h.action === "UPDATE_HASH");
       logTest("History contains UPDATE_HASH", hasUpdateHash);
+
+      // Debug: Show all actions if hash update not found
+      if (!hasUpdateHash) {
+        console.log(`      [DEBUG] History actions found: ${memoryWithHistory.history.map(h => h.action).join(", ")}`);
+      }
+    } else {
+      console.log(`      [DEBUG] No history included or history is empty`);
     }
 
     console.log();
