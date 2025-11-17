@@ -1040,6 +1040,22 @@ BEGIN
         )
       );
 
+      -- Log to data access log
+      INSERT INTO data_access_log (
+        user_id, operation, table_name, record_id,
+        changes, ip_address, user_agent
+      ) VALUES (
+        p_user_id, 'UPDATE', 'memories', NULL,
+        jsonb_build_object(
+          'memory_id', semantic_duplicate.id,
+          'previous_text', semantic_duplicate.memory_text,
+          'new_text', p_memory_text,
+          'similarity', semantic_duplicate.similarity,
+          'dedup_method', 'semantic'
+        ),
+        inet_client_addr(), current_setting('application_name', true)
+      );
+
       RETURN semantic_duplicate.id;
     END IF;
   END IF;
@@ -1068,6 +1084,20 @@ BEGIN
         memory_id, previous_value, new_value, action, metadata
       ) VALUES (
         existing_memory_id, NULL, p_memory_text, 'UPDATE_HASH', p_metadata
+      );
+
+      -- Log to data access log
+      INSERT INTO data_access_log (
+        user_id, operation, table_name, record_id,
+        changes, ip_address, user_agent
+      ) VALUES (
+        p_user_id, 'UPDATE', 'memories', NULL,
+        jsonb_build_object(
+          'memory_id', existing_memory_id,
+          'new_text', p_memory_text,
+          'dedup_method', 'hash'
+        ),
+        inet_client_addr(), current_setting('application_name', true)
       );
 
       RETURN existing_memory_id;
@@ -1101,8 +1131,9 @@ BEGIN
     user_id, operation, table_name, record_id,
     changes, ip_address, user_agent
   ) VALUES (
-    p_user_id, 'CREATE', 'memories', new_memory_id::UUID,
+    p_user_id, 'CREATE', 'memories', NULL,
     jsonb_build_object(
+      'memory_id', new_memory_id,
       'memory_text', p_memory_text,
       'metadata', p_metadata,
       'has_embedding', p_embedding IS NOT NULL
@@ -1195,7 +1226,7 @@ BEGIN
     user_id, operation, table_name, record_id,
     changes, ip_address, user_agent
   ) VALUES (
-    current_memory.user_id, 'UPDATE', 'memories', p_memory_id::UUID,
+    current_memory.user_id, 'UPDATE', 'memories', NULL,
     jsonb_build_object(
       'memory_id', p_memory_id,
       'text_changed', p_memory_text IS NOT NULL,
@@ -1378,8 +1409,9 @@ BEGIN
     user_id, operation, table_name, record_id,
     changes, ip_address, user_agent
   ) VALUES (
-    old_memory.user_id, 'DELETE', 'memories', p_memory_id::UUID,
+    old_memory.user_id, 'DELETE', 'memories', NULL,
     jsonb_build_object(
+      'memory_id', p_memory_id,
       'delete_type', CASE WHEN p_hard_delete THEN 'hard' ELSE 'soft' END,
       'memory_text', old_memory.memory_text,
       'metadata', old_memory.metadata
