@@ -1040,22 +1040,6 @@ BEGIN
         )
       );
 
-      -- Log to data access log
-      INSERT INTO data_access_log (
-        user_id, operation, table_name, record_id,
-        changes, ip_address, user_agent
-      ) VALUES (
-        p_user_id, 'UPDATE', 'memories', NULL,
-        jsonb_build_object(
-          'memory_id', semantic_duplicate.id,
-          'previous_text', semantic_duplicate.memory_text,
-          'new_text', p_memory_text,
-          'similarity', semantic_duplicate.similarity,
-          'dedup_method', 'semantic'
-        ),
-        inet_client_addr(), current_setting('application_name', true)
-      );
-
       RETURN semantic_duplicate.id;
     END IF;
   END IF;
@@ -1084,20 +1068,6 @@ BEGIN
         memory_id, previous_value, new_value, action, metadata
       ) VALUES (
         existing_memory_id, NULL, p_memory_text, 'UPDATE_HASH', p_metadata
-      );
-
-      -- Log to data access log
-      INSERT INTO data_access_log (
-        user_id, operation, table_name, record_id,
-        changes, ip_address, user_agent
-      ) VALUES (
-        p_user_id, 'UPDATE', 'memories', NULL,
-        jsonb_build_object(
-          'memory_id', existing_memory_id,
-          'new_text', p_memory_text,
-          'dedup_method', 'hash'
-        ),
-        inet_client_addr(), current_setting('application_name', true)
       );
 
       RETURN existing_memory_id;
