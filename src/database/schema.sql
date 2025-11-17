@@ -968,7 +968,8 @@ GRANT EXECUTE ON FUNCTION delete_personal_data(UUID[], BOOLEAN) TO authenticated
 
 -- Drop existing memory functions first
 -- Drop old function signatures explicitly for clean migration
-DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT);
+DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT);  -- 5-param old version
+DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT);  -- 6-param current version
 DROP FUNCTION IF EXISTS add_memory CASCADE;
 DROP FUNCTION IF EXISTS search_memories CASCADE;
 DROP FUNCTION IF EXISTS list_memories CASCADE;
