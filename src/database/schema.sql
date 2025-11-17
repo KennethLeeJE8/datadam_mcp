@@ -967,6 +967,8 @@ GRANT EXECUTE ON FUNCTION delete_personal_data(UUID[], BOOLEAN) TO authenticated
 -- These functions provide CRUD operations for semantic memories with vector embeddings
 
 -- Drop existing memory functions first
+-- Drop old function signatures explicitly for clean migration
+DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT);
 DROP FUNCTION IF EXISTS add_memory CASCADE;
 DROP FUNCTION IF EXISTS search_memories CASCADE;
 DROP FUNCTION IF EXISTS list_memories CASCADE;
@@ -1114,7 +1116,11 @@ $$;
 
 -- Function to update an existing memory by ID
 -- Supports updating text, embedding, and metadata (merge or replace)
+-- Drop old update_memory signatures explicitly for clean migration
 DROP FUNCTION IF EXISTS update_memory(TEXT, TEXT, vector, JSONB, BOOLEAN);
+DROP FUNCTION IF EXISTS update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN);
+DROP FUNCTION IF EXISTS update_memory CASCADE;
+
 CREATE OR REPLACE FUNCTION update_memory(
   p_memory_id TEXT,
   p_memory_text TEXT DEFAULT NULL,
