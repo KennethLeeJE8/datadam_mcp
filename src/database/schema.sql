@@ -1052,7 +1052,37 @@ DECLARE
   semantic_duplicate RECORD;
   similarity_threshold FLOAT;
 BEGIN
-  -- Step 1: Semantic deduplication (mem0 approach)
+  -- Step 1: Hash-based deduplication (exact match check first - fastest and most definitive)
+  IF p_hash IS NOT NULL THEN
+    SELECT id INTO existing_memory_id
+    FROM memories
+    WHERE hash = p_hash
+      AND user_id = p_user_id
+      AND deleted_at IS NULL
+    LIMIT 1;
+
+    IF existing_memory_id IS NOT NULL THEN
+      -- Update existing memory instead of creating duplicate
+      UPDATE memories
+      SET
+        memory_text = p_memory_text,
+        embedding = COALESCE(p_embedding, embedding),
+        metadata = p_metadata,
+        updated_at = NOW()
+      WHERE id = existing_memory_id;
+
+      -- Log the hash-based update in history
+      INSERT INTO memory_history (
+        memory_id, previous_value, new_value, action, metadata
+      ) VALUES (
+        existing_memory_id, NULL, p_memory_text, 'UPDATE_HASH', p_metadata
+      );
+
+      RETURN existing_memory_id;
+    END IF;
+  END IF;
+
+  -- Step 2: Semantic deduplication (mem0 approach - check for similar but not identical)
   -- If embedding provided, check for semantically similar memories
   IF p_embedding IS NOT NULL THEN
     -- Search for very similar memories (high similarity = likely duplicate)
@@ -1097,36 +1127,6 @@ BEGIN
       );
 
       RETURN semantic_duplicate.id;
-    END IF;
-  END IF;
-
-  -- Step 2: Hash-based deduplication (exact match fallback)
-  IF p_hash IS NOT NULL THEN
-    SELECT id INTO existing_memory_id
-    FROM memories
-    WHERE hash = p_hash
-      AND user_id = p_user_id
-      AND deleted_at IS NULL
-    LIMIT 1;
-
-    IF existing_memory_id IS NOT NULL THEN
-      -- Update existing memory instead of creating duplicate
-      UPDATE memories
-      SET
-        memory_text = p_memory_text,
-        embedding = COALESCE(p_embedding, embedding),
-        metadata = p_metadata,
-        updated_at = NOW()
-      WHERE id = existing_memory_id;
-
-      -- Log the hash-based update in history
-      INSERT INTO memory_history (
-        memory_id, previous_value, new_value, action, metadata
-      ) VALUES (
-        existing_memory_id, NULL, p_memory_text, 'UPDATE_HASH', p_metadata
-      );
-
-      RETURN existing_memory_id;
     END IF;
   END IF;
 
@@ -1325,8 +1325,8 @@ BEGIN
   -- Collect analytics
   SELECT COUNT(*) INTO v_results_count FROM temp_search_results;
   SELECT array_agg(temp_search_results.id ORDER BY temp_search_results.similarity DESC) INTO v_result_ids FROM temp_search_results;
-  SELECT array_agg(sub.similarity ORDER BY sub.similarity DESC) FILTER (WHERE sub.similarity IS NOT NULL)
-    INTO v_top_scores FROM (SELECT similarity FROM temp_search_results ORDER BY temp_search_results.similarity DESC LIMIT 5) sub;
+  SELECT array_agg(temp_search_results.similarity ORDER BY temp_search_results.similarity DESC) FILTER (WHERE temp_search_results.similarity IS NOT NULL)
+    INTO v_top_scores FROM temp_search_results LIMIT 5;
 
   -- Log to enhanced search log
   INSERT INTO search_query_log (
