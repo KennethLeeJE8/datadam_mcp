@@ -453,9 +453,62 @@ async function runTests() {
     console.log();
 
     // ========================================
-    // TEST 10: Get Statistics
+    // TEST 10: Direct RPC Function Call
     // ========================================
-    console.log("📝 TEST 10: Get Memory Statistics");
+    console.log("📝 TEST 10: Direct RPC Function Call");
+    console.log("-".repeat(80));
+
+    const rpcResult = await supabase.rpc('add_memory', {
+      p_memory_text: 'Direct RPC test memory',
+      p_user_id: null,
+      p_embedding: null,
+      p_metadata: { source: "test" },
+      p_hash: null
+    });
+
+    if (rpcResult.error) {
+      logTest("RPC add_memory call succeeded", false, rpcResult.error.message);
+    } else {
+      const rpcMemoryId = rpcResult.data as string;
+      testMemoryIds.push(rpcMemoryId);
+      logTest("RPC add_memory call succeeded", true);
+      logTest("RPC returned valid memory ID", /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rpcMemoryId));
+    }
+
+    console.log();
+
+    // ========================================
+    // TEST 11: Direct Vector Search RPC
+    // ========================================
+    console.log("📝 TEST 11: Direct Vector Search RPC Call");
+    console.log("-".repeat(80));
+
+    const queryVec = embeddingsService.generateMockEmbedding("programming languages");
+    const vectorString = `[${queryVec.join(',')}]`;
+
+    const searchRpc = await supabase.rpc('search_memories', {
+      p_query_embedding: vectorString,
+      p_user_id: null,
+      p_limit: 5,
+      p_filters: null,
+      p_threshold: 0.0
+    });
+
+    if (searchRpc.error) {
+      logTest("RPC search_memories call succeeded", false, searchRpc.error.message);
+    } else {
+      const results = searchRpc.data as any[];
+      logTest("RPC search_memories call succeeded", true);
+      logTest("RPC search returned results", results.length > 0);
+      logTest("RPC results have similarity scores", results[0]?.similarity !== undefined);
+    }
+
+    console.log();
+
+    // ========================================
+    // TEST 12: Get Statistics
+    // ========================================
+    console.log("📝 TEST 12: Get Memory Statistics");
     console.log("-".repeat(80));
 
     const stats = await memoryService.getMemoryStats();
@@ -506,6 +559,8 @@ async function runTests() {
     console.log("   ✅ Get memory (with history)");
     console.log("   ✅ Soft delete");
     console.log("   ✅ Hard delete");
+    console.log("   ✅ Direct RPC calls (add_memory)");
+    console.log("   ✅ Direct RPC calls (search_memories)");
     console.log("   ✅ Statistics");
     console.log();
 
