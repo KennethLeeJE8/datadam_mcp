@@ -1297,6 +1297,9 @@ DECLARE
 BEGIN
   v_start_time := clock_timestamp();
 
+  -- Drop temp table if it exists from a previous call
+  DROP TABLE IF EXISTS temp_search_results;
+
   -- Execute search and collect results
   CREATE TEMP TABLE temp_search_results AS
   SELECT
@@ -1321,9 +1324,9 @@ BEGIN
 
   -- Collect analytics
   SELECT COUNT(*) INTO v_results_count FROM temp_search_results;
-  SELECT array_agg(id ORDER BY similarity DESC) INTO v_result_ids FROM temp_search_results;
-  SELECT array_agg(similarity ORDER BY similarity DESC) FILTER (WHERE similarity IS NOT NULL)
-    INTO v_top_scores FROM (SELECT similarity FROM temp_search_results ORDER BY similarity DESC LIMIT 5) sub;
+  SELECT array_agg(temp_search_results.id ORDER BY temp_search_results.similarity DESC) INTO v_result_ids FROM temp_search_results;
+  SELECT array_agg(sub.similarity ORDER BY sub.similarity DESC) FILTER (WHERE sub.similarity IS NOT NULL)
+    INTO v_top_scores FROM (SELECT similarity FROM temp_search_results ORDER BY temp_search_results.similarity DESC LIMIT 5) sub;
 
   -- Log to enhanced search log
   INSERT INTO search_query_log (
@@ -1375,7 +1378,15 @@ BEGIN
   );
 
   -- Return results
-  RETURN QUERY SELECT * FROM temp_search_results;
+  RETURN QUERY
+  SELECT
+    temp_search_results.id,
+    temp_search_results.memory_text,
+    temp_search_results.metadata,
+    temp_search_results.similarity,
+    temp_search_results.created_at,
+    temp_search_results.updated_at
+  FROM temp_search_results;
 
   DROP TABLE temp_search_results;
 END;

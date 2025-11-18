@@ -43,6 +43,35 @@ function logTest(name: string, passed: boolean, details?: string) {
   console.log(`   ${icon} ${name}${details ? `: ${details}` : ""}`);
 }
 
+async function preTestCleanup() {
+  console.log("🧹 Pre-test cleanup: Removing stale test data...");
+
+  // Find all memories with source: "test" metadata
+  const { data: testMemories, error } = await supabase
+    .from("memories")
+    .select("id")
+    .contains("metadata", { source: "test" });
+
+  if (error) {
+    console.log(`   ⚠️  Warning: Could not query test memories: ${error.message}`);
+    return;
+  }
+
+  if (testMemories && testMemories.length > 0) {
+    console.log(`   Found ${testMemories.length} stale test memories, removing...`);
+    for (const memory of testMemories) {
+      try {
+        await memoryService.deleteMemory(memory.id, true);
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+    console.log(`   ✓ Removed ${testMemories.length} stale memories\n`);
+  } else {
+    console.log("   ✓ No stale test data found\n");
+  }
+}
+
 async function cleanup() {
   console.log("\n🧹 Cleaning up test memories...");
   for (const memoryId of testMemoryIds) {
@@ -137,6 +166,9 @@ async function runTests() {
 
   const usingOpenAI = memoryService.isUsingOpenAI();
   console.log(`🔑 Embeddings: ${usingOpenAI ? "✅ OpenAI" : "⚠️  Mock"}\n`);
+
+  // Clean up any stale test data from previous runs
+  await preTestCleanup();
 
   try {
     // ========================================
