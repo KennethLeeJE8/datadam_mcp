@@ -201,7 +201,6 @@ CREATE TABLE IF NOT EXISTS search_query_log (
 
   -- Query details
   query_text TEXT,
-  query_embedding vector(1536),
 
   -- User context
   user_id UUID,
@@ -218,11 +217,6 @@ CREATE TABLE IF NOT EXISTS search_query_log (
 
   -- Performance metrics
   search_duration_ms INTEGER,
-  embedding_duration_ms INTEGER,
-
-  -- Cost tracking (optional)
-  openai_tokens_used INTEGER,
-  openai_cost_usd DECIMAL(10, 8),
 
   -- Context
   ip_address INET,
@@ -280,7 +274,6 @@ CREATE INDEX IF NOT EXISTS idx_search_log_user_id ON search_query_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_search_log_created_at ON search_query_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_search_log_query_text ON search_query_log USING gin(to_tsvector('english', query_text));
 CREATE INDEX IF NOT EXISTS idx_search_log_results_count ON search_query_log(results_count);
-CREATE INDEX IF NOT EXISTS idx_search_log_embedding ON search_query_log USING ivfflat (query_embedding vector_cosine_ops) WITH (lists = 100);
 
 -- Row Level Security Policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -1331,7 +1324,6 @@ BEGIN
   -- Log to enhanced search log
   INSERT INTO search_query_log (
     query_text,
-    query_embedding,
     user_id,
     limit_requested,
     threshold,
@@ -1345,7 +1337,6 @@ BEGIN
     session_id
   ) VALUES (
     p_query_text,
-    NULL,  -- Don't store embedding by default (large storage)
     p_user_id,
     p_limit,
     p_threshold,
@@ -1357,24 +1348,6 @@ BEGIN
     inet_client_addr(),
     'search_memories_function',
     p_session_id
-  );
-
-  -- Also log to original audit log for compatibility
-  INSERT INTO data_access_log (
-    user_id, operation, table_name, record_id,
-    changes, ip_address, user_agent
-  ) VALUES (
-    p_user_id, 'READ', 'memories', NULL,
-    jsonb_build_object(
-      'operation_type', 'vector_search',
-      'query_text', p_query_text,
-      'limit', p_limit,
-      'filters', p_filters,
-      'threshold', p_threshold,
-      'results_count', v_results_count,
-      'duration_ms', v_duration_ms
-    ),
-    inet_client_addr(), 'search_memories_function'
   );
 
   -- Return results
@@ -2200,10 +2173,8 @@ WHERE NOT EXISTS (
 
 -- Drop existing views for idempotency
 DROP VIEW IF EXISTS recent_search_queries CASCADE;
-DROP VIEW IF EXISTS popular_search_queries CASCADE;
 DROP VIEW IF EXISTS search_queries_by_user CASCADE;
 DROP VIEW IF EXISTS daily_search_volume CASCADE;
-DROP VIEW IF EXISTS search_patterns_by_threshold CASCADE;
 
 -- View 1: Recent search queries with full details
 CREATE OR REPLACE VIEW recent_search_queries AS
@@ -2225,25 +2196,7 @@ LIMIT 50;
 
 COMMENT ON VIEW recent_search_queries IS 'Most recent 50 search queries with query text and parameters';
 
--- View 2: Most popular search queries
-CREATE OR REPLACE VIEW popular_search_queries AS
-SELECT
-  changes->>'query_text' as query_text,
-  COUNT(*) as search_count,
-  MIN(created_at) as first_searched,
-  MAX(created_at) as last_searched,
-  COUNT(DISTINCT user_id) as unique_users
-FROM data_access_log
-WHERE table_name = 'memories'
-  AND operation = 'READ'
-  AND changes->>'operation_type' = 'vector_search'
-  AND changes->>'query_text' IS NOT NULL
-GROUP BY changes->>'query_text'
-ORDER BY search_count DESC;
-
-COMMENT ON VIEW popular_search_queries IS 'Search queries ranked by frequency with usage statistics';
-
--- View 3: Search queries grouped by user
+-- View 2: Search queries grouped by user
 CREATE OR REPLACE VIEW search_queries_by_user AS
 SELECT
   user_id,
@@ -2281,24 +2234,6 @@ GROUP BY DATE(created_at)
 ORDER BY search_date DESC;
 
 COMMENT ON VIEW daily_search_volume IS 'Daily search statistics with volume, unique users, and example queries';
-
--- View 5: Search patterns by threshold
-CREATE OR REPLACE VIEW search_patterns_by_threshold AS
-SELECT
-  (changes->>'threshold')::float as threshold_value,
-  COUNT(*) as usage_count,
-  COUNT(DISTINCT user_id) as unique_users,
-  COUNT(DISTINCT changes->>'query_text') as unique_queries,
-  (array_agg(DISTINCT changes->>'query_text' ORDER BY changes->>'query_text')
-    FILTER (WHERE changes->>'query_text' IS NOT NULL))[1:3] as example_queries
-FROM data_access_log
-WHERE table_name = 'memories'
-  AND operation = 'READ'
-  AND changes->>'operation_type' = 'vector_search'
-GROUP BY (changes->>'threshold')::float
-ORDER BY usage_count DESC;
-
-COMMENT ON VIEW search_patterns_by_threshold IS 'Search behavior analysis grouped by similarity threshold values';
 
 
 -- ========================================
@@ -2412,14 +2347,8 @@ CREATE POLICY "users_insert_own_searches" ON search_query_log
 -- Example 1: View recent searches
 -- SELECT * FROM recent_search_queries LIMIT 10;
 
--- Example 2: Find most popular queries
--- SELECT query_text, search_count FROM popular_search_queries LIMIT 10;
-
--- Example 3: User search behavior
+-- Example 2: User search behavior
 -- SELECT user_id, total_searches, unique_queries FROM search_queries_by_user LIMIT 10;
 
--- Example 4: Daily trends
+-- Example 3: Daily trends
 -- SELECT search_date, total_searches, unique_users FROM daily_search_volume LIMIT 7;
-
--- Example 5: Threshold usage
--- SELECT threshold_value, usage_count FROM search_patterns_by_threshold;
