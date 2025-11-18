@@ -1057,7 +1057,7 @@ BEGIN
     SELECT id INTO existing_memory_id
     FROM memories
     WHERE hash = p_hash
-      AND user_id = p_user_id
+      AND (user_id IS NOT DISTINCT FROM p_user_id)
       AND deleted_at IS NULL
     LIMIT 1;
 
@@ -1094,8 +1094,9 @@ BEGIN
     FROM memories
     WHERE
       deleted_at IS NULL
-      AND (p_user_id IS NULL OR user_id = p_user_id)
+      AND (user_id IS NOT DISTINCT FROM p_user_id)
       AND embedding IS NOT NULL
+      AND (p_hash IS NULL OR hash != p_hash)
       AND (1 - (embedding <=> p_embedding)) >= p_semantic_dedup_threshold
     ORDER BY embedding <=> p_embedding
     LIMIT 1;
@@ -1107,7 +1108,6 @@ BEGIN
         memory_text = p_memory_text,
         embedding = p_embedding,
         metadata = p_metadata,
-        hash = p_hash,
         updated_at = NOW()
       WHERE id = semantic_duplicate.id;
 
