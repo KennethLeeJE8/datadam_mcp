@@ -13,6 +13,7 @@
 
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- Core user profiles with metadata support
 CREATE TABLE IF NOT EXISTS profiles (
@@ -149,6 +150,84 @@ CREATE TABLE IF NOT EXISTS error_recovery_attempts (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Mem0 Integration: Memories table for semantic memory storage
+-- Stores conversational memories with vector embeddings for semantic search
+CREATE TABLE IF NOT EXISTS memories (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    user_id UUID,
+    memory_text TEXT NOT NULL,
+    embedding vector(1536),
+    metadata JSONB DEFAULT '{}',
+    hash TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+
+    -- Metadata fields for filtering and organization
+    -- The metadata JSONB can contain:
+    -- - category: link to structured data categories
+    -- - tags: array of tags for organization
+    -- - source: where the memory came from (conversation, explicit, inferred)
+    -- - confidence: how confident the system is about this memory
+    -- - related_data_ids: UUIDs of related personal_data records
+    CONSTRAINT memories_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+);
+
+-- Memory history table for tracking changes to memories over time
+-- Implements audit trail and version control for memories
+CREATE TABLE IF NOT EXISTS memory_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    memory_id TEXT NOT NULL,
+    previous_value TEXT,
+    new_value TEXT,
+    action TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ,
+    is_deleted INTEGER DEFAULT 0,
+
+    CONSTRAINT memory_history_memory_id_fkey FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+);
+
+-- Update constraint to include new action types for semantic deduplication
+ALTER TABLE memory_history DROP CONSTRAINT IF EXISTS memory_history_action_check;
+ALTER TABLE memory_history ADD CONSTRAINT memory_history_action_check
+    CHECK (action IN ('ADD', 'UPDATE', 'UPDATE_SEMANTIC', 'UPDATE_HASH', 'DELETE'));
+
+-- Enhanced Search Query Logging Table
+-- Detailed analytics for search queries including query text, results, and performance metrics
+CREATE TABLE IF NOT EXISTS search_query_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Query details
+  query_text TEXT,
+
+  -- User context
+  user_id UUID,
+
+  -- Search parameters
+  limit_requested INTEGER,
+  threshold FLOAT,
+  filters JSONB,
+
+  -- Results
+  results_count INTEGER,
+  result_memory_ids TEXT[],
+  top_similarity_scores FLOAT[],
+
+  -- Performance metrics
+  search_duration_ms INTEGER,
+
+  -- Context
+  ip_address INET,
+  user_agent TEXT,
+  session_id TEXT,
+
+  -- Metadata
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
@@ -179,6 +258,23 @@ CREATE INDEX IF NOT EXISTS idx_error_recovery_correlation_id ON error_recovery_a
 CREATE INDEX IF NOT EXISTS idx_error_recovery_strategy ON error_recovery_attempts(recovery_strategy);
 CREATE INDEX IF NOT EXISTS idx_error_recovery_status ON error_recovery_attempts(status);
 
+-- Mem0 memory indexes for efficient querying and vector search
+CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_deleted_at ON memories(deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memories_metadata ON memories USING GIN(metadata);
+CREATE INDEX IF NOT EXISTS idx_memories_hash ON memories(hash);
+CREATE INDEX IF NOT EXISTS idx_memories_embedding ON memories USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_memory_history_memory_id ON memory_history(memory_id);
+CREATE INDEX IF NOT EXISTS idx_memory_history_created_at ON memory_history(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_history_action ON memory_history(action);
+
+-- Search query log indexes for analytics
+CREATE INDEX IF NOT EXISTS idx_search_log_user_id ON search_query_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_search_log_created_at ON search_query_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_search_log_query_text ON search_query_log USING gin(to_tsvector('english', query_text));
+CREATE INDEX IF NOT EXISTS idx_search_log_results_count ON search_query_log(results_count);
+
 -- Row Level Security Policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE personal_data ENABLE ROW LEVEL SECURITY;
@@ -188,6 +284,8 @@ ALTER TABLE error_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE error_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE error_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE error_recovery_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memory_history ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role to bypass RLS for admin operations
 DROP POLICY IF EXISTS "service_role_full_access_profiles" ON profiles;
@@ -238,6 +336,18 @@ CREATE POLICY "service_role_full_access_category_registry" ON category_registry
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_access_memories" ON memories;
+CREATE POLICY "service_role_full_access_memories" ON memories
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_full_access_memory_history" ON memory_history;
+CREATE POLICY "service_role_full_access_memory_history" ON memory_history
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
 -- Profiles policies
 -- Note: These policies assume auth.uid() matches user_id
 
@@ -279,6 +389,28 @@ CREATE POLICY "users_can_read_categories" ON category_registry
   FOR SELECT TO authenticated
   USING (true);
 
+-- Memory policies
+DROP POLICY IF EXISTS "users_can_crud_own_memories" ON memories;
+CREATE POLICY "users_can_crud_own_memories" ON memories
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid() OR user_id IS NULL);
+
+DROP POLICY IF EXISTS "users_can_view_own_memory_history" ON memory_history;
+CREATE POLICY "users_can_view_own_memory_history" ON memory_history
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM memories m
+      WHERE m.id = memory_history.memory_id
+      AND (m.user_id = auth.uid() OR m.user_id IS NULL)
+    )
+  );
+
+DROP POLICY IF EXISTS "users_can_insert_memory_history" ON memory_history;
+CREATE POLICY "users_can_insert_memory_history" ON memory_history
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
 -- Create triggers for updating timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -297,6 +429,12 @@ CREATE TRIGGER update_profiles_updated_at
 DROP TRIGGER IF EXISTS update_personal_data_updated_at ON personal_data;
 CREATE TRIGGER update_personal_data_updated_at
     BEFORE UPDATE ON personal_data
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_memories_updated_at ON memories;
+CREATE TRIGGER update_memories_updated_at
+    BEFORE UPDATE ON memories
     FOR EACH ROW
     EXECUTE PROCEDURE update_updated_at_column();
 
@@ -867,6 +1005,589 @@ GRANT EXECUTE ON FUNCTION update_personal_data(UUID, JSONB, TEXT) TO authenticat
 GRANT EXECUTE ON FUNCTION delete_personal_data(UUID[], BOOLEAN) TO authenticated;
 
 -- <<< END 002_mcp_functions.sql
+
+-- >>> BEGIN 002b_memory_functions.sql
+
+-- Mem0 Memory Management Functions
+-- These functions provide CRUD operations for semantic memories with vector embeddings
+
+-- Drop existing memory functions first
+-- Drop existing memory functions for idempotent schema application
+DROP FUNCTION IF EXISTS add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT);
+DROP FUNCTION IF EXISTS add_memory CASCADE;
+DROP FUNCTION IF EXISTS search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT, TEXT);
+DROP FUNCTION IF EXISTS search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS search_memories CASCADE;
+DROP FUNCTION IF EXISTS list_memories CASCADE;
+DROP FUNCTION IF EXISTS delete_memory CASCADE;
+DROP FUNCTION IF EXISTS get_memory CASCADE;
+DROP FUNCTION IF EXISTS get_memory_stats CASCADE;
+DROP FUNCTION IF EXISTS update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN);
+DROP FUNCTION IF EXISTS update_memory CASCADE;
+
+-- Function to add a new memory with vector embedding
+-- This function stores natural language memories and tracks them in history
+CREATE OR REPLACE FUNCTION add_memory(
+  p_memory_text TEXT,
+  p_user_id UUID DEFAULT NULL,
+  p_embedding vector(1536) DEFAULT NULL,
+  p_metadata JSONB DEFAULT '{}'::JSONB,
+  p_hash TEXT DEFAULT NULL,
+  p_semantic_dedup_threshold FLOAT DEFAULT 0.95
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  new_memory_id TEXT;
+  existing_memory_id TEXT;
+  semantic_duplicate RECORD;
+  similarity_threshold FLOAT;
+BEGIN
+  -- Step 1: Hash-based deduplication (exact match check first - fastest and most definitive)
+  IF p_hash IS NOT NULL THEN
+    SELECT id INTO existing_memory_id
+    FROM memories
+    WHERE hash = p_hash
+      AND (user_id IS NOT DISTINCT FROM p_user_id)
+      AND deleted_at IS NULL
+    LIMIT 1;
+
+    IF existing_memory_id IS NOT NULL THEN
+      -- Update existing memory instead of creating duplicate
+      UPDATE memories
+      SET
+        memory_text = p_memory_text,
+        embedding = COALESCE(p_embedding, embedding),
+        metadata = p_metadata,
+        updated_at = NOW()
+      WHERE id = existing_memory_id;
+
+      -- Log the hash-based update in history
+      INSERT INTO memory_history (
+        memory_id, previous_value, new_value, action, metadata
+      ) VALUES (
+        existing_memory_id, NULL, p_memory_text, 'UPDATE_HASH', p_metadata
+      );
+
+      RETURN existing_memory_id;
+    END IF;
+  END IF;
+
+  -- Step 2: Semantic deduplication (mem0 approach - check for similar but not identical)
+  -- If embedding provided, check for semantically similar memories
+  IF p_embedding IS NOT NULL THEN
+    -- Search for very similar memories (high similarity = likely duplicate)
+    SELECT
+      id,
+      memory_text,
+      1 - (embedding <=> p_embedding) AS similarity
+    INTO semantic_duplicate
+    FROM memories
+    WHERE
+      deleted_at IS NULL
+      AND (user_id IS NOT DISTINCT FROM p_user_id)
+      AND embedding IS NOT NULL
+      AND (p_hash IS NULL OR hash != p_hash)
+      AND (1 - (embedding <=> p_embedding)) >= p_semantic_dedup_threshold
+    ORDER BY embedding <=> p_embedding
+    LIMIT 1;
+
+    -- If very similar memory found, update it instead of creating new (mem0 behavior)
+    IF semantic_duplicate.id IS NOT NULL THEN
+      UPDATE memories
+      SET
+        memory_text = p_memory_text,
+        embedding = p_embedding,
+        metadata = p_metadata,
+        updated_at = NOW()
+      WHERE id = semantic_duplicate.id;
+
+      -- Log the semantic update in history
+      INSERT INTO memory_history (
+        memory_id, previous_value, new_value, action, metadata
+      ) VALUES (
+        semantic_duplicate.id,
+        semantic_duplicate.memory_text,
+        p_memory_text,
+        'UPDATE_SEMANTIC',
+        jsonb_build_object(
+          'similarity', semantic_duplicate.similarity,
+          'dedup_method', 'semantic',
+          'metadata', p_metadata
+        )
+      );
+
+      RETURN semantic_duplicate.id;
+    END IF;
+  END IF;
+
+  -- Create new memory
+  INSERT INTO memories (
+    user_id,
+    memory_text,
+    embedding,
+    metadata,
+    hash
+  ) VALUES (
+    p_user_id,
+    p_memory_text,
+    p_embedding,
+    p_metadata,
+    p_hash
+  ) RETURNING id INTO new_memory_id;
+
+  -- Log the creation in history
+  INSERT INTO memory_history (
+    memory_id, previous_value, new_value, action, metadata
+  ) VALUES (
+    new_memory_id, NULL, p_memory_text, 'ADD', p_metadata
+  );
+
+  -- Log the operation in data access log
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    p_user_id, 'CREATE', 'memories', NULL,
+    jsonb_build_object(
+      'memory_id', new_memory_id,
+      'memory_text', p_memory_text,
+      'metadata', p_metadata,
+      'has_embedding', p_embedding IS NOT NULL
+    ),
+    inet_client_addr(), 'add_memory_function'
+  );
+
+  RETURN new_memory_id;
+END;
+$$;
+
+-- Function to update an existing memory by ID
+-- Supports updating text, embedding, and metadata (merge or replace)
+CREATE OR REPLACE FUNCTION update_memory(
+  p_memory_id TEXT,
+  p_memory_text TEXT DEFAULT NULL,
+  p_embedding vector(1536) DEFAULT NULL,
+  p_metadata JSONB DEFAULT NULL,
+  p_metadata_merge BOOLEAN DEFAULT TRUE
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  current_memory RECORD;
+  new_metadata JSONB;
+  new_hash TEXT;
+BEGIN
+  -- Get current memory
+  SELECT * INTO current_memory
+  FROM memories
+  WHERE id = p_memory_id
+    AND deleted_at IS NULL;
+
+  IF current_memory IS NULL THEN
+    RAISE EXCEPTION 'Memory not found or deleted: %', p_memory_id;
+  END IF;
+
+  -- Calculate new hash if text is changing
+  IF p_memory_text IS NOT NULL THEN
+    new_hash := md5(p_memory_text || COALESCE(current_memory.user_id::TEXT, ''));
+  ELSE
+    new_hash := current_memory.hash;
+  END IF;
+
+  -- Handle metadata merge or replace
+  IF p_metadata IS NOT NULL THEN
+    IF p_metadata_merge THEN
+      new_metadata := current_memory.metadata || p_metadata;
+    ELSE
+      new_metadata := p_metadata;
+    END IF;
+  ELSE
+    new_metadata := current_memory.metadata;
+  END IF;
+
+  -- Update the memory
+  UPDATE memories
+  SET
+    memory_text = COALESCE(p_memory_text, memory_text),
+    embedding = COALESCE(p_embedding, embedding),
+    metadata = new_metadata,
+    hash = new_hash,
+    updated_at = NOW()
+  WHERE id = p_memory_id;
+
+  -- Log in history
+  INSERT INTO memory_history (
+    memory_id,
+    previous_value,
+    new_value,
+    action,
+    metadata
+  ) VALUES (
+    p_memory_id,
+    current_memory.memory_text,
+    COALESCE(p_memory_text, current_memory.memory_text),
+    'UPDATE',
+    new_metadata
+  );
+
+  -- Log in data access log
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    current_memory.user_id, 'UPDATE', 'memories', NULL,
+    jsonb_build_object(
+      'memory_id', p_memory_id,
+      'text_changed', p_memory_text IS NOT NULL,
+      'embedding_changed', p_embedding IS NOT NULL,
+      'metadata_changed', p_metadata IS NOT NULL
+    ),
+    inet_client_addr(), 'update_memory_function'
+  );
+
+  RETURN jsonb_build_object(
+    'memory_id', p_memory_id,
+    'updated', true,
+    'action', 'UPDATE'
+  );
+END;
+$$;
+
+-- Function to search memories using vector similarity with enhanced logging
+-- Returns memories ranked by semantic similarity to the query embedding
+CREATE OR REPLACE FUNCTION search_memories(
+  p_query_embedding vector(1536),
+  p_user_id UUID DEFAULT NULL,
+  p_limit INTEGER DEFAULT 10,
+  p_filters JSONB DEFAULT NULL,
+  p_threshold FLOAT DEFAULT 0.1,
+  p_query_text TEXT DEFAULT NULL,
+  p_session_id TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  id TEXT,
+  memory_text TEXT,
+  metadata JSONB,
+  similarity FLOAT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_start_time TIMESTAMPTZ;
+  v_end_time TIMESTAMPTZ;
+  v_duration_ms INTEGER;
+  v_results_count INTEGER;
+  v_result_ids TEXT[];
+  v_top_scores FLOAT[];
+BEGIN
+  v_start_time := clock_timestamp();
+
+  -- Drop temp table if it exists from a previous call
+  DROP TABLE IF EXISTS temp_search_results;
+
+  -- Execute search and collect results
+  CREATE TEMP TABLE temp_search_results AS
+  SELECT
+    m.id,
+    m.memory_text,
+    m.metadata,
+    1 - (m.embedding <=> p_query_embedding) AS similarity,
+    m.created_at,
+    m.updated_at
+  FROM memories m
+  WHERE
+    m.deleted_at IS NULL
+    AND (p_user_id IS NULL OR m.user_id = p_user_id)
+    AND m.embedding IS NOT NULL
+    AND (p_filters IS NULL OR m.metadata @> p_filters)
+    AND (1 - (m.embedding <=> p_query_embedding)) >= p_threshold
+  ORDER BY m.embedding <=> p_query_embedding
+  LIMIT p_limit;
+
+  v_end_time := clock_timestamp();
+  v_duration_ms := EXTRACT(MILLISECONDS FROM (v_end_time - v_start_time))::INTEGER;
+
+  -- Collect analytics
+  SELECT COUNT(*) INTO v_results_count FROM temp_search_results;
+  SELECT array_agg(temp_search_results.id ORDER BY temp_search_results.similarity DESC) INTO v_result_ids FROM temp_search_results;
+  SELECT array_agg(temp_search_results.similarity ORDER BY temp_search_results.similarity DESC) FILTER (WHERE temp_search_results.similarity IS NOT NULL)
+    INTO v_top_scores FROM temp_search_results LIMIT 5;
+
+  -- Log to enhanced search log
+  INSERT INTO search_query_log (
+    query_text,
+    user_id,
+    limit_requested,
+    threshold,
+    filters,
+    results_count,
+    result_memory_ids,
+    top_similarity_scores,
+    search_duration_ms,
+    ip_address,
+    user_agent,
+    session_id
+  ) VALUES (
+    p_query_text,
+    p_user_id,
+    p_limit,
+    p_threshold,
+    p_filters,
+    v_results_count,
+    v_result_ids,
+    v_top_scores,
+    v_duration_ms,
+    inet_client_addr(),
+    'search_memories_function',
+    p_session_id
+  );
+
+  -- Return results
+  RETURN QUERY
+  SELECT
+    temp_search_results.id,
+    temp_search_results.memory_text,
+    temp_search_results.metadata,
+    temp_search_results.similarity,
+    temp_search_results.created_at,
+    temp_search_results.updated_at
+  FROM temp_search_results;
+
+  DROP TABLE temp_search_results;
+END;
+$$;
+
+-- Function to list all memories for a user with pagination
+-- Supports filtering by metadata and returns results ordered by creation time
+CREATE OR REPLACE FUNCTION list_memories(
+  p_user_id UUID DEFAULT NULL,
+  p_limit INTEGER DEFAULT 50,
+  p_offset INTEGER DEFAULT 0,
+  p_filters JSONB DEFAULT NULL,
+  p_include_deleted BOOLEAN DEFAULT FALSE
+)
+RETURNS TABLE (
+  id TEXT,
+  memory_text TEXT,
+  metadata JSONB,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Log the list operation
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    p_user_id, 'READ', 'memories', NULL,
+    jsonb_build_object(
+      'operation_type', 'list',
+      'limit', p_limit,
+      'offset', p_offset,
+      'filters', p_filters,
+      'include_deleted', p_include_deleted
+    ),
+    inet_client_addr(), 'list_memories_function'
+  );
+
+  RETURN QUERY
+  SELECT
+    m.id,
+    m.memory_text,
+    m.metadata,
+    m.created_at,
+    m.updated_at,
+    m.deleted_at
+  FROM memories m
+  WHERE
+    (p_user_id IS NULL OR m.user_id = p_user_id)
+    AND (p_include_deleted OR m.deleted_at IS NULL)
+    AND (p_filters IS NULL OR m.metadata @> p_filters)
+  ORDER BY m.created_at DESC
+  LIMIT p_limit
+  OFFSET p_offset;
+END;
+$$;
+
+-- Function to delete memory (soft delete by default, hard delete optional)
+-- Supports both single and bulk deletion with history tracking
+CREATE OR REPLACE FUNCTION delete_memory(
+  p_memory_id TEXT,
+  p_hard_delete BOOLEAN DEFAULT FALSE
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  old_memory memories%ROWTYPE;
+  delete_count INTEGER;
+BEGIN
+  -- Get the current memory for logging
+  SELECT * INTO old_memory FROM memories
+  WHERE id = p_memory_id
+    AND (p_hard_delete = TRUE OR deleted_at IS NULL);
+
+  IF NOT FOUND THEN
+    RETURN FALSE;
+  END IF;
+
+  IF p_hard_delete THEN
+    -- Permanent deletion
+    DELETE FROM memories WHERE id = p_memory_id;
+
+    -- Mark history as deleted
+    UPDATE memory_history
+    SET is_deleted = 1, updated_at = NOW()
+    WHERE memory_id = p_memory_id;
+  ELSE
+    -- Soft deletion
+    UPDATE memories
+    SET deleted_at = NOW()
+    WHERE id = p_memory_id AND deleted_at IS NULL;
+
+    -- Log the soft deletion in history
+    INSERT INTO memory_history (
+      memory_id, previous_value, new_value, action, metadata
+    ) VALUES (
+      p_memory_id, old_memory.memory_text, NULL, 'DELETE',
+      jsonb_build_object('delete_type', 'soft')
+    );
+  END IF;
+
+  -- Log the deletion in data access log
+  INSERT INTO data_access_log (
+    user_id, operation, table_name, record_id,
+    changes, ip_address, user_agent
+  ) VALUES (
+    old_memory.user_id, 'DELETE', 'memories', NULL,
+    jsonb_build_object(
+      'memory_id', p_memory_id,
+      'delete_type', CASE WHEN p_hard_delete THEN 'hard' ELSE 'soft' END,
+      'memory_text', old_memory.memory_text,
+      'metadata', old_memory.metadata
+    ),
+    inet_client_addr(), 'delete_memory_function'
+  );
+
+  RETURN TRUE;
+END;
+$$;
+
+-- Function to get a single memory by ID
+-- Returns complete memory details including history
+CREATE OR REPLACE FUNCTION get_memory(
+  p_memory_id TEXT,
+  p_include_history BOOLEAN DEFAULT FALSE
+)
+RETURNS TABLE (
+  id TEXT,
+  memory_text TEXT,
+  metadata JSONB,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
+  history JSONB
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    m.id,
+    m.memory_text,
+    m.metadata,
+    m.created_at,
+    m.updated_at,
+    m.deleted_at,
+    CASE
+      WHEN p_include_history THEN
+        (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'action', mh.action,
+              'previous_value', mh.previous_value,
+              'new_value', mh.new_value,
+              'metadata', mh.metadata,
+              'created_at', mh.created_at
+            ) ORDER BY mh.created_at DESC
+          )
+          FROM memory_history mh
+          WHERE mh.memory_id = m.id
+        )
+      ELSE NULL
+    END as history
+  FROM memories m
+  WHERE m.id = p_memory_id;
+END;
+$$;
+
+-- Function to get memory statistics
+CREATE OR REPLACE FUNCTION get_memory_stats(
+  p_user_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+  total_memories INTEGER,
+  active_memories INTEGER,
+  deleted_memories INTEGER,
+  total_history_entries INTEGER,
+  memories_with_embeddings INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    COUNT(*)::INTEGER as total_memories,
+    COUNT(*) FILTER (WHERE deleted_at IS NULL)::INTEGER as active_memories,
+    COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::INTEGER as deleted_memories,
+    (SELECT COUNT(*)::INTEGER
+     FROM memory_history mh
+     WHERE mh.memory_id IN (
+       SELECT m.id
+       FROM memories m
+       WHERE p_user_id IS NULL OR m.user_id = p_user_id
+     )
+    ) as total_history_entries,
+    COUNT(*) FILTER (WHERE embedding IS NOT NULL AND deleted_at IS NULL)::INTEGER as memories_with_embeddings
+  FROM memories
+  WHERE p_user_id IS NULL OR user_id = p_user_id;
+END;
+$$;
+
+-- Grant permissions to service role
+GRANT EXECUTE ON FUNCTION add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT) TO service_role;
+GRANT EXECUTE ON FUNCTION update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN) TO service_role;
+GRANT EXECUTE ON FUNCTION search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT, TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION list_memories(UUID, INTEGER, INTEGER, JSONB, BOOLEAN) TO service_role;
+GRANT EXECUTE ON FUNCTION delete_memory(TEXT, BOOLEAN) TO service_role;
+GRANT EXECUTE ON FUNCTION get_memory(TEXT, BOOLEAN) TO service_role;
+GRANT EXECUTE ON FUNCTION get_memory_stats(UUID) TO service_role;
+
+-- Grant permissions to authenticated users
+GRANT EXECUTE ON FUNCTION add_memory(TEXT, UUID, vector(1536), JSONB, TEXT, FLOAT) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_memory(TEXT, TEXT, vector(1536), JSONB, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION search_memories(vector(1536), UUID, INTEGER, JSONB, FLOAT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION list_memories(UUID, INTEGER, INTEGER, JSONB, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION delete_memory(TEXT, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_memory(TEXT, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_memory_stats(UUID) TO authenticated;
+
+-- <<< END 002b_memory_functions.sql
 
 -- >>> BEGIN 003_error_logging.sql
 
@@ -1442,3 +2163,192 @@ WHERE NOT EXISTS (
   AND category = 'interests'
   AND deleted_at IS NULL
 );
+
+
+-- ========================================
+-- SEARCH QUERY ANALYTICS VIEWS
+-- ========================================
+-- Views for analyzing search query patterns and user behavior
+-- These views work with the query_text logged in data_access_log
+
+-- Drop existing views for idempotency
+DROP VIEW IF EXISTS recent_search_queries CASCADE;
+DROP VIEW IF EXISTS search_queries_by_user CASCADE;
+DROP VIEW IF EXISTS daily_search_volume CASCADE;
+
+-- View 1: Recent search queries with full details
+CREATE OR REPLACE VIEW recent_search_queries AS
+SELECT
+  id,
+  user_id,
+  changes->>'query_text' as query_text,
+  (changes->>'limit')::int as limit_used,
+  (changes->>'threshold')::float as threshold_used,
+  changes->>'filters' as filters,
+  ip_address,
+  created_at
+FROM data_access_log
+WHERE table_name = 'memories'
+  AND operation = 'READ'
+  AND changes->>'operation_type' = 'vector_search'
+ORDER BY created_at DESC
+LIMIT 50;
+
+COMMENT ON VIEW recent_search_queries IS 'Most recent 50 search queries with query text and parameters';
+
+-- View 2: Search queries grouped by user
+CREATE OR REPLACE VIEW search_queries_by_user AS
+SELECT
+  user_id,
+  COUNT(*) as total_searches,
+  COUNT(DISTINCT changes->>'query_text') as unique_queries,
+  MIN(created_at) as first_search,
+  MAX(created_at) as last_search,
+  array_agg(DISTINCT changes->>'query_text' ORDER BY changes->>'query_text')
+    FILTER (WHERE changes->>'query_text' IS NOT NULL) as all_queries
+FROM data_access_log
+WHERE table_name = 'memories'
+  AND operation = 'READ'
+  AND changes->>'operation_type' = 'vector_search'
+GROUP BY user_id
+ORDER BY total_searches DESC;
+
+COMMENT ON VIEW search_queries_by_user IS 'User search behavior showing total searches and unique queries per user';
+
+-- View 4: Daily search volume with examples
+CREATE OR REPLACE VIEW daily_search_volume AS
+SELECT
+  DATE(created_at) as search_date,
+  COUNT(*) as total_searches,
+  COUNT(DISTINCT user_id) as unique_users,
+  COUNT(DISTINCT changes->>'query_text') as unique_queries,
+  AVG((changes->>'limit')::int) as avg_limit,
+  AVG((changes->>'threshold')::float) as avg_threshold,
+  (array_agg(DISTINCT changes->>'query_text' ORDER BY changes->>'query_text')
+    FILTER (WHERE changes->>'query_text' IS NOT NULL))[1:5] as example_queries
+FROM data_access_log
+WHERE table_name = 'memories'
+  AND operation = 'READ'
+  AND changes->>'operation_type' = 'vector_search'
+GROUP BY DATE(created_at)
+ORDER BY search_date DESC;
+
+COMMENT ON VIEW daily_search_volume IS 'Daily search statistics with volume, unique users, and example queries';
+
+
+-- ========================================
+-- ENHANCED SEARCH ANALYTICS VIEWS
+-- ========================================
+
+-- Popular search queries from enhanced log
+CREATE OR REPLACE VIEW enhanced_popular_search_queries AS
+SELECT
+  query_text,
+  COUNT(*) as query_count,
+  AVG(results_count) as avg_results,
+  AVG(search_duration_ms) as avg_duration_ms,
+  MIN(created_at) as first_searched,
+  MAX(created_at) as last_searched
+FROM search_query_log
+WHERE query_text IS NOT NULL
+GROUP BY query_text
+ORDER BY query_count DESC;
+
+-- Zero-result searches (queries that found nothing)
+CREATE OR REPLACE VIEW zero_result_searches AS
+SELECT
+  query_text,
+  COUNT(*) as zero_result_count,
+  MAX(created_at) as last_occurrence
+FROM search_query_log
+WHERE results_count = 0
+  AND query_text IS NOT NULL
+GROUP BY query_text
+ORDER BY zero_result_count DESC;
+
+-- Search performance metrics
+CREATE OR REPLACE VIEW search_performance_stats AS
+SELECT
+  DATE(created_at) as search_date,
+  COUNT(*) as total_searches,
+  COUNT(DISTINCT user_id) as unique_users,
+  AVG(results_count) as avg_results,
+  AVG(search_duration_ms) as avg_duration_ms,
+  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY search_duration_ms) as median_duration_ms,
+  PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY search_duration_ms) as p95_duration_ms,
+  SUM(CASE WHEN results_count = 0 THEN 1 ELSE 0 END) as zero_result_count
+FROM search_query_log
+GROUP BY DATE(created_at)
+ORDER BY search_date DESC;
+
+-- User search behavior
+CREATE OR REPLACE VIEW user_search_behavior AS
+SELECT
+  user_id,
+  COUNT(*) as total_searches,
+  COUNT(DISTINCT DATE(created_at)) as active_days,
+  AVG(results_count) as avg_results_per_search,
+  AVG(threshold) as avg_threshold,
+  MIN(created_at) as first_search,
+  MAX(created_at) as last_search,
+  EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at))) / 86400 as days_active
+FROM search_query_log
+GROUP BY user_id
+ORDER BY total_searches DESC;
+
+
+-- ========================================
+-- SEARCH LOG CLEANUP FUNCTION
+-- ========================================
+
+-- Function to clean old search logs (keep last 90 days)
+CREATE OR REPLACE FUNCTION cleanup_old_search_logs(retention_days INTEGER DEFAULT 90)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_deleted_count INTEGER;
+BEGIN
+  DELETE FROM search_query_log
+  WHERE created_at < NOW() - (retention_days || ' days')::INTERVAL;
+
+  GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+  RETURN v_deleted_count;
+END;
+$$;
+
+
+-- ========================================
+-- SEARCH QUERY LOG RLS POLICIES
+-- ========================================
+
+ALTER TABLE search_query_log ENABLE ROW LEVEL SECURITY;
+
+-- Service role can do everything
+DROP POLICY IF EXISTS "service_role_full_access_search_log" ON search_query_log;
+CREATE POLICY "service_role_full_access_search_log" ON search_query_log
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Users can view their own search history
+DROP POLICY IF EXISTS "users_view_own_searches" ON search_query_log;
+CREATE POLICY "users_view_own_searches" ON search_query_log
+  FOR SELECT TO authenticated USING (auth.uid() = user_id);
+
+-- Users can insert their own searches
+DROP POLICY IF EXISTS "users_insert_own_searches" ON search_query_log;
+CREATE POLICY "users_insert_own_searches" ON search_query_log
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+
+-- ========================================
+-- USAGE EXAMPLES
+-- ========================================
+
+-- Example 1: View recent searches
+-- SELECT * FROM recent_search_queries LIMIT 10;
+
+-- Example 2: User search behavior
+-- SELECT user_id, total_searches, unique_queries FROM search_queries_by_user LIMIT 10;
+
+-- Example 3: Daily trends
+-- SELECT search_date, total_searches, unique_users FROM daily_search_volume LIMIT 7;
