@@ -16,50 +16,37 @@ export function registerAddMemoryTool(
     "datadam_add_memory",
     {
       title: "Add Semantic Memory",
-      description: `Store natural language memories for contextual recall. Automatically generates embeddings for semantic search using OpenAI (or mock embeddings if API key not configured).
+      description: `Store conversational memories for semantic search. Captures preferences, learning, interests, and conversation context.
 
-WHEN TO USE:
-- User shares preferences: "I prefer morning meetings", "I like dark mode"
-- Contextual information: "I'm learning TypeScript", "I'm working on a project about AI"
-- Inferred insights: "User seems interested in functional programming"
-- Conversation context: "We discussed API design patterns"
-- Explicit memory requests: "Remember that I use tabs not spaces"
+Use for:
+- Preferences and opinions: "I prefer dark mode", "I like morning meetings"
+- Current learning: "I'm learning TypeScript", "I use Docker"
+- Conversation context: "We discussed API patterns"
+- Temporal states: "I'm working on X project"
+- Interests: "I'm interested in functional programming"
 
-DIFFERENCE FROM STRUCTURED DATA:
-- Memories: Conversational, contextual, temporal ("I'm currently learning X")
-- Structured Data: Facts, attributes, categories ("Contact: John Smith, email: john@example.com")
-
-EMBEDDING GENERATION:
-- Automatically generates OpenAI embeddings if OPENAI_API_KEY is configured
-- Falls back to mock embeddings for testing if no API key is present
-- Embeddings enable semantic search via datadam_search_memories
+Note: For definitive identity facts (name, email, address, job title, contacts), use datadam_create_personal_data instead.
 
 Args:
   - memory_text (string, required): Natural language memory content
   - user_id (string, optional): User UUID for multi-user systems
-  - metadata (object, optional): Additional context. Common fields:
-    * source: "conversation" | "explicit" | "inferred"
-    * category: Link to structured category (e.g., "preferences", "interests")
-    * tags: Array of tags for organization
-    * confidence: 0.0-1.0 score for inferred memories
-    * related_data_ids: UUIDs of related structured data
+  - metadata (object, optional): Additional context. Fields: source, category, tags, confidence, related_data_ids
   - response_format (string, optional): 'markdown' (default) or 'json'
 
 Returns:
-  - Success message with memory ID and embedding status
+  - Success message with memory ID
   - For JSON format: {success: true, operation: "created", memory_id, message, has_embedding, embedding_type}
   - For Markdown format: "✓ Successfully stored memory: **{memory_text}**"
 
 Examples:
-  1. Simple preference: { memory_text: "I prefer dark mode in all applications", metadata: { source: "conversation", category: "preferences" } }
-  2. Learning context: { memory_text: "I'm currently learning TypeScript and building an MCP server", metadata: { source: "conversation", tags: ["learning", "typescript", "mcp"] } }
-  3. Inferred insight: { memory_text: "User seems to prefer functional programming patterns", metadata: { source: "inferred", confidence: 0.85 } }
+  1. Learning: { memory_text: "I'm currently learning TypeScript and building an MCP server", metadata: { source: "conversation", tags: ["learning", "typescript"] } }
+  2. Preference: { memory_text: "I prefer morning meetings because I'm more productive early", metadata: { source: "explicit", category: "preferences" } }
+  3. Context: { memory_text: "We discussed API design patterns and REST experience", metadata: { source: "conversation" } }
 
 Error Handling:
   - Database errors: Returns error with troubleshooting guidance
   - Invalid input: Returns validation error
-  - Deduplication: Automatically updates existing memory with same hash
-  - Embedding failures: Falls back to storing without embeddings (search will still work with mock embeddings)`,
+  - Deduplication: Automatically updates existing memory with same hash`,
       inputSchema: AddMemoryInputSchema,
       annotations: {
         readOnlyHint: false,

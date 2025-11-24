@@ -17,38 +17,32 @@ export function registerListMemoriesTool(
     "datadam_list_memories",
     {
       title: "List All Memories",
-      description: `List all stored memories with pagination and filtering. Browse memories without semantic search.
+      description: `List all stored memories with optional filtering and pagination.
 
-WHEN TO USE:
-- Browse all memories: "Show me all my memories"
-- Review specific type: Filter by metadata like source or category
-- Pagination: Navigate through large memory sets
-- Audit: Review what's been stored
-
-DIFFERENCE FROM SEARCH:
-- Lists memories chronologically (newest first)
-- No similarity ranking
-- Use this for browsing, use search for finding relevant context
+Use for:
+- Browsing all memories: "Show me all my memories"
+- Reviewing stored content: "What memories are stored?"
+- Filtered listing: "List memories from conversations"
 
 Args:
   - user_id (string, optional): User UUID to filter results
-  - limit (number, optional): Results per page. Default: 50, Range: 1-100
+  - limit (number, optional): Max results. Default: 50, Range: 1-100
   - offset (number, optional): Pagination offset. Default: 0
-  - filters (object, optional): Metadata filters. Examples: {"source": "conversation"}, {"category": "preferences"}
+  - filters (object, optional): Metadata filters
   - include_deleted (boolean, optional): Include soft-deleted memories. Default: false
   - response_format (string, optional): 'markdown' (default) or 'json'
 
 Returns:
   - For JSON format: {total, count, memories[], offset, has_more}
   - For Markdown format: Numbered list with content, metadata, timestamps
-  - Ordered by creation time (newest first)
+  - Paginated results with has_more indicator
 
 Examples:
   1. List all: { limit: 10, offset: 0 }
   2. User-specific: { user_id: "uuid-here", limit: 20 }
   3. Filtered: { filters: {"source": "conversation"}, limit: 15 }
   4. With deleted: { include_deleted: true, limit: 50 }
-  5. Pagination: { limit: 10, offset: 10 } // Get second page
+  5. Pagination: { limit: 10, offset: 10 }
 
 Error Handling:
   - No memories: Returns empty array with suggestion to add memories

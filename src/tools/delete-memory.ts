@@ -18,39 +18,30 @@ export function registerDeleteMemoryTool(
       title: "Delete Memory",
       description: `Delete a stored memory. Supports soft delete (recoverable) and hard delete (permanent).
 
-WHEN TO USE:
-- Remove outdated memory: "Delete that old preference about using Windows"
-- Clean up incorrect memory: "That memory about Python is wrong, delete it"
-- User requests deletion: "Remove what you know about my location"
+Use for:
+- Remove outdated memory: "Delete that old preference"
+- Clean up incorrect memory: "That memory is wrong, delete it"
+- User requests deletion: "Remove what you stored about X"
 
-IMPORTANT:
-- Soft delete (default): Memory is hidden but can be recovered
-- Hard delete: Permanent removal, cannot be undone
-- Always get memory ID first using datadam_list_memories or datadam_search_memories
+Note: Obtain memory_id from datadam_list_memories or datadam_search_memories first.
 
 Args:
-  - memory_id (string, required): Memory ID to delete (from list/search results)
+  - memory_id (string, required): Memory ID to delete
   - hard_delete (boolean, optional): Permanent deletion. Default: false (soft delete)
   - response_format (string, optional): 'markdown' (default) or 'json'
 
 Returns:
-  - Success message confirming deletion
+  - Success message confirming deletion type
   - For JSON format: {success: true, operation: "deleted", memory_id, delete_type}
-  - For Markdown format: "✓ Successfully deleted memory: {id}"
+  - For Markdown format: "✓ Successfully {soft/permanently} deleted memory"
 
 Examples:
   1. Soft delete: { memory_id: "abc-123" }
   2. Hard delete: { memory_id: "abc-123", hard_delete: true }
 
-Workflow:
-  1. Search/list to find memory_id
-  2. Confirm deletion intent
-  3. Delete with appropriate hard_delete flag
-
 Error Handling:
   - Memory not found: Returns error indicating memory doesn't exist or already deleted
-  - Database errors: Returns error with troubleshooting guidance
-  - Hard delete on deleted: Returns error (use include_deleted with list first)`,
+  - Database errors: Returns error with troubleshooting guidance`,
       inputSchema: DeleteMemoryInputSchema,
       annotations: {
         readOnlyHint: false,

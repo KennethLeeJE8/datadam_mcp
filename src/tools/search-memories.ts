@@ -17,23 +17,16 @@ export function registerSearchMemoriesTool(
     "datadam_search_memories",
     {
       title: "Search Memories Semantically",
-      description: `Search stored memories using semantic similarity. Automatically generates embeddings for your query using OpenAI (or mock embeddings if API key not configured). Finds contextually relevant memories even without exact keyword matches.
+      description: `Search memories using semantic similarity. Finds contextually relevant memories even without exact keyword matches.
 
-WHEN TO USE:
-- Finding preferences: "What do you know about my preferences?"
-- Contextual recall: "What have we discussed about TypeScript?"
-- Insight discovery: "What programming languages do I use?"
-- Broad queries: "Tell me about my work setup"
+Use for:
+- Preference queries: "What are my meeting preferences?"
+- Learning queries: "What programming languages do I use?"
+- Conversation recall: "What have we discussed about TypeScript?"
+- Broad topics: "Tell me about my work setup"
+- Opinion queries: "What do I think about X?"
 
-DIFFERENCE FROM KEYWORD SEARCH:
-- Semantic search finds conceptually similar memories using vector similarity
-- Keyword search (datadam_search_personal_data) finds exact matches in structured data
-- Use this for conversational queries, use keyword search for specific facts
-
-EMBEDDING GENERATION:
-- Automatically generates OpenAI embeddings for your query if OPENAI_API_KEY is configured
-- Falls back to mock embeddings for testing if no API key is present
-- Compares query embedding against stored memory embeddings using cosine similarity
+Note: For specific facts (email addresses, phone numbers, names), use datadam_search_personal_data instead.
 
 Args:
   - query (string, required): Natural language search query
