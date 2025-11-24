@@ -2,7 +2,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatErrorMessage, checkAndTruncateResponse } from "../utils/formatting.js";
+import { formatErrorMessage, checkAndTruncateMemories } from "../utils/formatting.js";
 import { ListMemoriesInputSchema } from "../schemas/index.js";
 import { MemoryService } from "../services/memory.js";
 import { CHARACTER_LIMIT } from "../constants.js";
@@ -89,71 +89,40 @@ Error Handling:
           };
         }
 
-        if (response_format === 'json') {
-          return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                total: memories.length,
-                count: memories.length,
-                offset: offset,
-                has_more: memories.length === limit, // If we got exactly limit, there might be more
-                memories: memories.map(m => ({
-                  id: m.id,
-                  memory_text: m.memory_text,
-                  metadata: m.metadata,
-                  created_at: m.created_at,
-                  updated_at: m.updated_at,
-                  deleted_at: m.deleted_at || null
-                }))
-              }, null, 2)
-            }]
-          };
-        } else {
-          // Format markdown response
-          let text = `Found ${memories.length} ${memories.length === 1 ? 'memory' : 'memories'}`;
-          if (offset > 0) {
-            text += ` (starting from ${offset})`;
-          }
-          text += ':\n\n';
+        // Format response with character limit checking
+        const truncationResult = checkAndTruncateMemories(
+          memories,
+          CHARACTER_LIMIT,
+          response_format,
+          offset,
+          {
+            total: memories.length,
+            hasMore: memories.length === limit,
+            nextOffset: offset + memories.length
+          },
+          { showIds: true, showMetadata: true }
+        );
 
-          memories.forEach((memory, index) => {
-            const displayIndex = offset + index + 1;
-            const isDeleted = memory.deleted_at ? ' [DELETED]' : '';
-            text += `${displayIndex}. ${memory.memory_text}${isDeleted}\n`;
-            text += `   🆔 ID: \`${memory.id}\`\n`;
-
-            if (memory.metadata && Object.keys(memory.metadata).length > 0) {
-              text += `   📝 Metadata: ${JSON.stringify(memory.metadata)}\n`;
-            }
-
-            const createdDate = new Date(memory.created_at).toLocaleString();
-            text += `   🕒 Created: ${createdDate}\n`;
-
-            if (memory.deleted_at) {
-              const deletedDate = new Date(memory.deleted_at).toLocaleString();
-              text += `   🗑️  Deleted: ${deletedDate}\n`;
-            }
-
-            text += '\n';
-          });
-
-          if (memories.length === limit) {
-            text += `\n💡 More memories may be available. Use offset: ${offset + limit} to see the next page.`;
-          }
-
-          // Check if response is too long
-          if (text.length > CHARACTER_LIMIT) {
-            text = text.substring(0, CHARACTER_LIMIT) + `\n\n⚠️  Response truncated due to length. Use pagination to see more results.`;
-          }
-
-          return {
-            content: [{
-              type: "text",
-              text: text
-            }]
-          };
+        // Add list context to markdown format
+        let finalText = truncationResult.text;
+        if (response_format === 'markdown' && !truncationResult.wasTruncated) {
+          const countText = `Found ${memories.length} ${memories.length === 1 ? 'memory' : 'memories'}`;
+          const offsetText = offset > 0 ? ` (starting from ${offset})` : '';
+          const moreText = memories.length === limit ? `\n\n💡 More memories may be available. Use offset: ${offset + limit} to see the next page.` : '';
+          finalText = `${countText}${offsetText}:\n\n${truncationResult.text}${moreText}`;
+        } else if (response_format === 'markdown' && truncationResult.wasTruncated) {
+          // Truncation message already included in truncationResult.text
+          const countText = `Found ${truncationResult.originalCount} ${truncationResult.originalCount === 1 ? 'memory' : 'memories'} (showing ${truncationResult.truncatedCount})`;
+          const offsetText = offset > 0 ? ` (starting from ${offset})` : '';
+          finalText = `${countText}${offsetText}:\n\n${truncationResult.text}`;
         }
+
+        return {
+          content: [{
+            type: "text",
+            text: finalText
+          }]
+        };
       } catch (error) {
         return {
           content: [{

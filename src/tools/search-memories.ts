@@ -2,7 +2,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatErrorMessage, checkAndTruncateResponse } from "../utils/formatting.js";
+import { formatErrorMessage, checkAndTruncateMemories } from "../utils/formatting.js";
 import { SearchMemoriesInputSchema } from "../schemas/index.js";
 import { MemoryService } from "../services/memory.js";
 import { CHARACTER_LIMIT } from "../constants.js";
@@ -91,51 +91,35 @@ Error Handling:
           };
         }
 
-        if (response_format === 'json') {
-          return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                total: results.length,
-                threshold_used: threshold,
-                query: query,
-                results: results.map(r => ({
-                  memory_text: r.memory_text,
-                  similarity: r.similarity,
-                  metadata: r.metadata,
-                  created_at: r.created_at,
-                  updated_at: r.updated_at
-                }))
-              }, null, 2)
-            }]
-          };
-        } else {
-          // Format markdown response
-          let text = `Found ${results.length} ${results.length === 1 ? 'memory' : 'memories'} matching "${query}":\n\n`;
+        // Format response with character limit checking
+        const truncationResult = checkAndTruncateMemories(
+          results,
+          CHARACTER_LIMIT,
+          response_format,
+          0, // offset is always 0 for search
+          {
+            total: results.length,
+            threshold,
+            query
+          },
+          { isSearchResult: true, showMetadata: true }
+        );
 
-          results.forEach((result, index) => {
-            const similarityPercent = (result.similarity * 100).toFixed(1);
-            text += `${index + 1}. **[${similarityPercent}% match]** ${result.memory_text}\n`;
-
-            if (result.metadata && Object.keys(result.metadata).length > 0) {
-              text += `   📝 Metadata: ${JSON.stringify(result.metadata)}\n`;
-            }
-
-            text += `   🕒 Created: ${new Date(result.created_at).toLocaleDateString()}\n\n`;
-          });
-
-          // Check if response is too long
-          if (text.length > CHARACTER_LIMIT) {
-            text = text.substring(0, CHARACTER_LIMIT) + `\n\n⚠️  Response truncated. Try reducing limit or increasing threshold.`;
-          }
-
-          return {
-            content: [{
-              type: "text",
-              text: text
-            }]
-          };
+        // Add search context to markdown format
+        let finalText = truncationResult.text;
+        if (response_format === 'markdown' && !truncationResult.wasTruncated) {
+          finalText = `Found ${results.length} ${results.length === 1 ? 'memory' : 'memories'} matching "${query}":\n\n${truncationResult.text}`;
+        } else if (response_format === 'markdown' && truncationResult.wasTruncated) {
+          // Truncation message already included in truncationResult.text
+          finalText = `Found ${truncationResult.originalCount} ${truncationResult.originalCount === 1 ? 'memory' : 'memories'} matching "${query}" (showing ${truncationResult.truncatedCount}):\n\n${truncationResult.text}`;
         }
+
+        return {
+          content: [{
+            type: "text",
+            text: finalText
+          }]
+        };
       } catch (error) {
         return {
           content: [{

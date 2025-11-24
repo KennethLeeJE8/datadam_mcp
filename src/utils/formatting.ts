@@ -176,6 +176,25 @@ export function formatErrorMessage(
   return output;
 }
 
+export interface Memory {
+  id: string;
+  memory_text: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
+}
+
+export interface MemorySearchResult extends Memory {
+  similarity: number;
+}
+
+export interface MemoryFormattingOptions {
+  showIds?: boolean;
+  showMetadata?: boolean;
+  isSearchResult?: boolean;
+}
+
 export interface TruncationResult {
   text: string;
   wasTruncated: boolean;
@@ -259,6 +278,245 @@ export function checkAndTruncateResponse(
     originalCount,
     truncatedCount,
     totalCount: total,
+    hasMore: true,
+    nextOffset: offset + truncatedCount
+  };
+}
+
+// ============================================================================
+// Memory-specific formatting utilities
+// ============================================================================
+
+/**
+ * Formats a single memory as Markdown
+ */
+export function formatMemoryAsMarkdown(
+  memory: Memory | MemorySearchResult,
+  options?: MemoryFormattingOptions
+): string {
+  const { showIds = false, showMetadata = true, isSearchResult = false } = options || {};
+  const isDeleted = memory.deleted_at ? ' [DELETED]' : '';
+
+  let output = `# Memory${isDeleted}\n\n`;
+  output += `${memory.memory_text}\n\n`;
+
+  if (isSearchResult && 'similarity' in memory) {
+    const similarityPercent = (memory.similarity * 100).toFixed(1);
+    output += `- **Similarity**: ${similarityPercent}%\n`;
+  }
+
+  if (showIds) {
+    output += `- **ID**: \`${memory.id}\`\n`;
+  }
+
+  if (showMetadata && memory.metadata && Object.keys(memory.metadata).length > 0) {
+    output += `- **Metadata**: ${JSON.stringify(memory.metadata, null, 2)}\n`;
+  }
+
+  output += `- **Created**: ${formatTimestamp(memory.created_at)}\n`;
+
+  if (memory.deleted_at) {
+    output += `- **Deleted**: ${formatTimestamp(memory.deleted_at)}\n`;
+  }
+
+  return output;
+}
+
+/**
+ * Formats memories as human-readable Markdown
+ */
+export function formatMemoriesAsMarkdown(
+  memories: Memory[] | MemorySearchResult[],
+  options?: MemoryFormattingOptions
+): string {
+  if (!memories || memories.length === 0) {
+    return "No memories found.";
+  }
+
+  const { showIds = false, showMetadata = true, isSearchResult = false } = options || {};
+
+  let output = '';
+
+  memories.forEach((memory, index) => {
+    const displayIndex = index + 1;
+    const isDeleted = memory.deleted_at ? ' [DELETED]' : '';
+
+    output += `${displayIndex}. ${memory.memory_text}${isDeleted}\n`;
+
+    if (isSearchResult && 'similarity' in memory) {
+      const searchResult = memory as MemorySearchResult;
+      const similarityPercent = (searchResult.similarity * 100).toFixed(1);
+      output += `   📊 **Similarity**: ${similarityPercent}%\n`;
+    }
+
+    if (showIds) {
+      output += `   🆔 **ID**: \`${memory.id}\`\n`;
+    }
+
+    if (showMetadata && memory.metadata && Object.keys(memory.metadata).length > 0) {
+      output += `   📝 **Metadata**: ${JSON.stringify(memory.metadata)}\n`;
+    }
+
+    output += `   🕒 **Created**: ${new Date(memory.created_at).toLocaleDateString()}\n`;
+
+    if (memory.deleted_at) {
+      output += `   🗑️  **Deleted**: ${new Date(memory.deleted_at).toLocaleDateString()}\n`;
+    }
+
+    output += '\n';
+  });
+
+  return output;
+}
+
+/**
+ * Formats memories as structured JSON for machine readability
+ */
+export function formatMemoriesAsJSON(
+  memories: Memory[] | MemorySearchResult[],
+  metadata?: {
+    total?: number;
+    count?: number;
+    hasMore?: boolean;
+    nextOffset?: number;
+    offset?: number;
+    threshold?: number;
+    query?: string;
+    truncated?: boolean;
+    truncationMessage?: string;
+  }
+): string {
+  const isSearchResult = memories.length > 0 && 'similarity' in memories[0];
+
+  const response: any = {
+    total: metadata?.total || memories.length,
+    count: metadata?.count || memories.length,
+    ...(metadata?.offset !== undefined && { offset: metadata.offset }),
+    has_more: metadata?.hasMore || false,
+    ...(metadata?.nextOffset !== undefined && { next_offset: metadata.nextOffset })
+  };
+
+  // Add search-specific fields
+  if (isSearchResult) {
+    if (metadata?.threshold !== undefined) {
+      response.threshold_used = metadata.threshold;
+    }
+    if (metadata?.query) {
+      response.query = metadata.query;
+    }
+    response.results = (memories as MemorySearchResult[]).map(m => ({
+      memory_text: m.memory_text,
+      similarity: m.similarity,
+      metadata: m.metadata,
+      created_at: m.created_at,
+      updated_at: m.updated_at,
+      ...(m.deleted_at && { deleted_at: m.deleted_at })
+    }));
+  } else {
+    response.memories = memories.map(m => ({
+      id: m.id,
+      memory_text: m.memory_text,
+      metadata: m.metadata,
+      created_at: m.created_at,
+      updated_at: m.updated_at,
+      ...(m.deleted_at && { deleted_at: m.deleted_at })
+    }));
+  }
+
+  // Add truncation info if present
+  if (metadata?.truncated) {
+    response.truncated = true;
+    response.truncation_message = metadata.truncationMessage;
+  }
+
+  return JSON.stringify(response, null, 2);
+}
+
+/**
+ * Checks if memory response exceeds character limit and truncates if necessary
+ */
+export function checkAndTruncateMemories(
+  memories: Memory[] | MemorySearchResult[],
+  characterLimit: number,
+  responseFormat: 'json' | 'markdown',
+  offset: number,
+  metadata?: {
+    total?: number;
+    hasMore?: boolean;
+    nextOffset?: number;
+    threshold?: number;
+    query?: string;
+  },
+  formatOptions?: MemoryFormattingOptions
+): TruncationResult {
+  const originalCount = memories.length;
+
+  // First try with all results
+  let responseText: string;
+  if (responseFormat === 'json') {
+    responseText = formatMemoriesAsJSON(memories, {
+      total: metadata?.total || memories.length,
+      count: memories.length,
+      hasMore: metadata?.hasMore || false,
+      nextOffset: metadata?.nextOffset || 0,
+      offset: offset,
+      threshold: metadata?.threshold,
+      query: metadata?.query
+    });
+  } else {
+    responseText = formatMemoriesAsMarkdown(memories, formatOptions);
+  }
+
+  // If within limit, return as-is
+  if (responseText.length <= characterLimit) {
+    return {
+      text: responseText,
+      wasTruncated: false,
+      originalCount,
+      truncatedCount: originalCount,
+      totalCount: metadata?.total,
+      hasMore: metadata?.hasMore,
+      nextOffset: metadata?.nextOffset
+    };
+  }
+
+  // Need to truncate - iteratively reduce records
+  let truncatedMemories = memories;
+  let truncatedCount = originalCount;
+
+  // Start with half, then keep halving until we fit or reach 1 record
+  while (truncatedCount > 1 && responseText.length > characterLimit) {
+    truncatedCount = Math.max(1, Math.floor(truncatedCount / 2));
+    truncatedMemories = memories.slice(0, truncatedCount);
+
+    if (responseFormat === 'json') {
+      responseText = formatMemoriesAsJSON(truncatedMemories, {
+        total: metadata?.total || memories.length,
+        count: truncatedCount,
+        hasMore: true,
+        nextOffset: offset + truncatedCount,
+        offset: offset,
+        threshold: metadata?.threshold,
+        query: metadata?.query,
+        truncated: true,
+        truncationMessage: `Response truncated from ${originalCount} to ${truncatedCount} memories due to ${characterLimit} character limit. Use 'offset=${offset + truncatedCount}', increase threshold, or add filters to see more.`
+      });
+    } else {
+      const markdownResults = formatMemoriesAsMarkdown(truncatedMemories, formatOptions);
+      const isSearchResult = memories.length > 0 && 'similarity' in memories[0];
+      const guidanceMessage = isSearchResult
+        ? `Use offset=${offset + truncatedCount}, increase threshold, or add filters to see more.`
+        : `Use offset=${offset + truncatedCount} or add filters to see more.`;
+      responseText = `${markdownResults}\n⚠️ **Response Truncated**: Showing ${truncatedCount}/${originalCount} memories (reduced due to ${characterLimit} char limit). ${guidanceMessage}`;
+    }
+  }
+
+  return {
+    text: responseText,
+    wasTruncated: true,
+    originalCount,
+    truncatedCount,
+    totalCount: metadata?.total,
     hasMore: true,
     nextOffset: offset + truncatedCount
   };
