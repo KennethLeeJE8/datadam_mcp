@@ -10,12 +10,15 @@ import { registerUpdateTool } from "./tools/update.js";
 import { registerDeleteTool } from "./tools/delete.js";
 import { registerChatGptSearchTool } from "./tools/chatgpt-search.js";
 import { registerChatGptFetchTool } from "./tools/chatgpt-fetch.js";
+import { registerAddMemoryTool } from "./tools/add-memory.js";
+import { registerSearchMemoriesTool } from "./tools/search-memories.js";
+import { registerListMemoriesTool } from "./tools/list-memories.js";
+import { registerDeleteMemoryTool } from "./tools/delete-memory.js";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "datadam",
-    version: "1.0.0",
-    description: "Personal knowledge database that automatically retrieves stored personal context when needed for personalized responses. Captures and stores personal information when user shares details. Triggers on: 'my [anything]', personal questions, preference queries, or when personal context would improve responses."
+    version: "1.0.0"
   });
 
   // Register resource
@@ -27,6 +30,12 @@ export function createMcpServer(): McpServer {
   registerCreateTool(server, supabase, allCategories);
   registerUpdateTool(server, supabase);
   registerDeleteTool(server, supabase);
+
+  // Register memory tools
+  registerAddMemoryTool(server, supabase);
+  registerSearchMemoriesTool(server, supabase);
+  registerListMemoriesTool(server, supabase);
+  registerDeleteMemoryTool(server, supabase);
 
   return server;
 }
