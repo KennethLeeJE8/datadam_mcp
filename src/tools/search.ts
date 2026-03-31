@@ -109,6 +109,13 @@ Error Handling:
           };
         }
 
+        // Sort newest-first so the AI encounters the most recent information first
+        if (results) {
+          results.sort((a: any, b: any) =>
+            new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+          );
+        }
+
         if (!results || results.length === 0) {
           const suggestion = "Try:\n- Using broader search terms\n- Checking spelling\n- Removing category filters\n- Using datadam_extract_personal_data to browse categories";
           return {

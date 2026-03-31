@@ -1,5 +1,7 @@
 // Formatting utilities for MCP tool responses
 
+import { relativeAge } from "../lib/relative-age.js";
+
 export interface PersonalDataRecord {
   id: string;
   user_id?: string;
@@ -57,7 +59,7 @@ export function formatAsMarkdown(
     }
 
     if (record.created_at) {
-      output += `- **Created**: ${formatTimestamp(record.created_at)}\n`;
+      output += `- **Created**: ${formatTimestamp(record.created_at)} (${relativeAge(new Date(record.created_at))})\n`;
     }
 
     output += `\n---\n\n`;
@@ -111,7 +113,7 @@ export function formatSingleRecordMarkdown(record: PersonalDataRecord): string {
   output += `**Content**:\n\`\`\`json\n${JSON.stringify(record.content, null, 2)}\n\`\`\`\n\n`;
 
   if (record.created_at) {
-    output += `**Created**: ${formatTimestamp(record.created_at)}\n`;
+    output += `**Created**: ${formatTimestamp(record.created_at)} (${relativeAge(new Date(record.created_at))})\n`;
   }
 
   return output;
