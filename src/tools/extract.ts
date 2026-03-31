@@ -108,6 +108,13 @@ Error Handling:
           };
         }
 
+        // Sort newest-first so the AI encounters the most recent information first
+        if (results) {
+          results.sort((a: any, b: any) =>
+            new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+          );
+        }
+
         if (!results || results.length === 0) {
           const filterInfo = tags && tags.length > 0
             ? ` in category: ${category} with tags: ${tags.join(', ')}`
